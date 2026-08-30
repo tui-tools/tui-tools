@@ -255,6 +255,7 @@ tui-tools [flags]
   -check            read the machine and print the family's state as JSON
   -demo             a sample machine; nothing is installed, removed or started
   -offline          use the catalog snapshot embedded in this binary
+  -report           print what a bug report needs, then exit
   -sudo string      privilege escalation prefix, "" to disable
   -theme string     path to an Omarchy-style colors.toml
   -version          print the version and exit
@@ -285,6 +286,51 @@ $ tui-tools --check | jq '{manager, repo: .repo.configured, catalog: .catalog.so
 The exit code says whether the tool worked, not whether the machine is up to
 date: a machine with nothing installed is a successful run, and the news is in
 `summary`.
+
+### `--report`, for bug reports
+
+`--report` prints, in one block, everything a maintainer has to ask for
+otherwise: the tool and kit versions, the package manager driving this machine
+and the version probed off it, whether the family repository is configured,
+which catalog the tool list came from, the distribution, the kernel, the
+terminal, the theme, the escalation prefix, and whether the running binary came
+from a package. It installs nothing and needs no privileges, so it works on the
+machine where the bug is — including one whose package manager the launcher
+cannot drive at all, which is itself a thing worth reporting.
+
+```console
+$ tui-tools --report
+tui-tools 0.1.2 (kit v0.2.9)
+backend: dnf 5.2.18
+mode: live
+distro: fedora 42 (Fedora Linux 42 (Workstation Edition))
+kernel: 6.19.14-108.fc42.x86_64
+arch: x86_64
+locale: en_US.UTF-8
+term: xterm-256color
+theme: tokyo-night
+sudo: sudo -n
+root: no
+binary: /usr/bin/tui-tools (packaged)
+repo: configured (/etc/yum.repos.d/tui-tools.repo)
+catalog: live (the family catalog), generated 2026-08-30
+managers: pacman absent, apt absent, dnf 5.2.18
+```
+
+The last three lines are most of this tool's bug reports: "my tool is not
+listed" reads differently depending on whether the repository was never added,
+the manager is one the launcher does not drive, or the list came from the
+snapshot embedded a release ago rather than from the live catalog.
+
+The block is written to be published as it is: it carries no hostname, user
+name, home path or address, and no environment variable beyond `LANG`,
+`LC_ALL`, `TERM` and `TERM_PROGRAM`. A binary living under your home directory
+is reported as being there without naming the path, and a catalog URL you
+configured yourself is reported as configured rather than printed. `--report`
+works with `--demo` too, where it says so on the `mode` line.
+
+The bug form asks for this block first — see
+[`.github/ISSUE_TEMPLATE/bug_report.yml`](.github/ISSUE_TEMPLATE/bug_report.yml).
 
 ## What it can do to your machine
 
