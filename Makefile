@@ -1,15 +1,17 @@
-# tui-template — build, test and lint.
+# tui-tools — build, test and lint.
 
 GO      ?= go
 BIN     ?= bin
-TOOL    := tui-template
+TOOL    := tui-tools
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 # The screenshot renderer is shared by the whole family and ships with the
 # kit, which is already a dependency: ask the module cache where it landed.
 KIT     = $(shell $(GO) list -m -f '{{.Dir}}' github.com/tui-tools/tui-kit)
+# The family catalog, which `make catalog` snapshots into the binary.
+CATALOG_URL ?= https://tui.tools/catalog.json
 
-.PHONY: manifest readme compat check-exec all build test vet fmt fmt-check lint check demo clean tidy install screenshots
+.PHONY: manifest readme compat catalog check-exec all build test vet fmt fmt-check lint check demo clean tidy install screenshots
 
 all: check build
 
@@ -65,7 +67,16 @@ tidy:
 screenshots: build
 	python3 $(KIT)/tools/render-screenshots.py \
 		--bin $(BIN)/$(TOOL) --name $(TOOL) --out docs/screenshots \
-		--screen main= --screen touch=t --screen help=?
+		--screen main= --screen install='jji' --screen repo=s \
+		--screen filter='/fire' --screen help=?
+
+## catalog: refresh the catalog snapshot embedded in the binary, then check
+## that what was downloaded is a document this launcher can read. The snapshot
+## is what --demo shows and what a machine with no network falls back to, so a
+## broken download has to fail here rather than on someone's terminal.
+catalog:
+	curl -fsSL --retry 3 -o internal/catalog/snapshot.json $(CATALOG_URL)
+	$(GO) test ./internal/catalog -run TestSnapshot -v
 
 ## readme: regenerate the generated README sections from tool.json.
 readme:

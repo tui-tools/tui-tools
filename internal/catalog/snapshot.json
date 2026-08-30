@@ -1,0 +1,1135 @@
+{
+  "schema": 1,
+  "generated": "2026-08-30T14:41:20.278Z",
+  "packages": {
+    "repo": "https://pkgs.tui.tools",
+    "install_script": "https://pkgs.tui.tools/install.sh",
+    "live": true,
+    "deb": "deb [signed-by=/etc/apt/keyrings/tui-tools.gpg] https://pkgs.tui.tools/deb stable main",
+    "rpm": "https://pkgs.tui.tools/rpm/tui-tools.repo",
+    "arch": "Server = https://pkgs.tui.tools/arch/$arch"
+  },
+  "signing": {
+    "pubkey": "https://pkgs.tui.tools/pubkey.asc"
+  },
+  "tools": [
+    {
+      "name": "tui-cert",
+      "package": "tui-cert",
+      "binary": "tui-cert",
+      "tagline": "Every certificate on the machine, and what will stop working when",
+      "description": "A terminal UI for the TLS certificates on this machine. It finds them — the Let's Encrypt tree, /etc/ssl, /etc/pki, the paths an nginx, Apache or Caddy configuration names — and puts them on one screen, worst first: expired, expiring, the ones whose private key is not their key, the ones whose key every account can read.\n\nReading is done in Go. crypto/x509 parses the chain, verifies it against the system trust store and compares the key, so the whole inventory works on a machine with no openssl, no certbot and nothing else installed. Those are optional and only ever used to act.\n\nThree more screens complete it: what certbot or acme.sh manages and whether its renewal timer is really running; a live TLS handshake, on demand, which is how a certificate renewed on disk and never reloaded shows itself; and where the tool looked, including what it could not open.\n\nEvery change is previewed as the exact command line: a rehearsed renewal, a forced one with what it costs in rate limit, or a generated key pair.\n\nRun `tui-cert --demo` for a sample machine with seven certificates in seven states, and nothing touched.",
+      "category": "certificates",
+      "icon": "https://tui.tools/tools/tui-cert/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-cert/tui-cert-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T14:02:31Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "certbot",
+        "acme-sh",
+        "openssl"
+      ],
+      "compat": {
+        "certbot": {
+          "binary": "certbot",
+          "minimum": "1.0",
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=1.0",
+              "impact": "certbot is optional: without it the inventory, the chain validation, the key match and the live check all still work, and only the renewal screen's two keys say there is nothing here to renew with"
+            },
+            {
+              "range": "<2.0",
+              "impact": "a certificate renewed by this certbot keeps the RSA key type it was issued with; from 2.0 the default became ECDSA, so a renewal there can change the key type of a certificate a client was pinned to"
+            }
+          ]
+        },
+        "acme-sh": {
+          "binary": "acme.sh",
+          "minimum": "3.0.0",
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=3.0.0",
+              "impact": "acme.sh renews from a crontab entry rather than a systemd timer, and tui-cert reads nobody's crontab: the renewal screen says so instead of claiming nothing is scheduled"
+            }
+          ]
+        },
+        "openssl": {
+          "binary": "openssl",
+          "minimum": "1.1.1",
+          "tested": [
+            "3.0.13",
+            "3.5.5",
+            "3.6.4"
+          ],
+          "features": [
+            {
+              "name": "addext",
+              "since": "1.1.1"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<1.1.1",
+              "impact": "`openssl req` has no `-addext`, so a subject alternative name cannot be set on the command line; tui-cert will not write an openssl configuration file, so the generate keys say why they are unavailable rather than producing a certificate no client accepts"
+            },
+            {
+              "range": ">=1.1.1",
+              "impact": "openssl is only ever used to generate a key pair; nothing is read with it, so a machine without it loses two keys and keeps every screen"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-cert",
+      "page": "https://tui.tools/tools/tui-cert/",
+      "changelog": "https://github.com/tui-tools/tui-cert/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-containers",
+      "package": "tui-containers",
+      "binary": "tui-containers",
+      "tagline": "Every container on one screen, docker and podman together",
+      "description": "A terminal UI for the containers on a machine. Docker and Podman are two engines with two stores, two sets of commands and — for Podman — two scopes that do not see each other; tui-containers puts them on one list, worst first: the ones exited non-zero, the ones stuck restarting, the ones their own health check disagrees with.\n\nA container is more than its row. Open one and it says what it is using right now from a single `stats --no-stream` sample, what it is mounted on, which networks it is on, what its health check has actually been printing, and its environment — with any value whose name contains PASS, SECRET, TOKEN or KEY replaced, and the name still on screen.\n\nLogs are a pane, read with `logs --tail` and re-read on a timer: nothing is left following.\n\nChanges are previewed as the exact command line. Start, stop, restart, kill, pause, remove, `update --restart`, an image pull, `compose up -d`/`down`/`pull` for a project — with the project name and directory read from the labels Compose itself wrote. Every prune is a sentence you pick before it is a flag. There is no `exec`.\n\nRun `tui-containers --demo` to drive a sample machine with both engines, and nothing touched.",
+      "category": "containers",
+      "icon": "https://tui.tools/tools/tui-containers/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-containers/tui-containers-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T14:14:50Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "docker",
+        "podman"
+      ],
+      "compat": {
+        "docker": {
+          "binary": "docker",
+          "minimum": "20.10",
+          "tested": [],
+          "features": [
+            {
+              "name": "format-json",
+              "since": "23.0"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<23.0",
+              "impact": "`--format json` as a shorthand does not exist, so every list is read with `--format '{{json .}}'` instead. Nothing is lost: it is the same output, and it is what the shorthand expands to"
+            },
+            {
+              "range": ">=20.10",
+              "impact": "`docker --version` answers without a daemon, which is why it is the version probe: a machine with the CLI installed and dockerd stopped reports its version and then reports the daemon as not answering, with the reason"
+            },
+            {
+              "range": ">=20.10",
+              "impact": "the label list `docker ps` prints is every label joined with commas and nothing is escaped, so a label value containing a comma can be mis-split. The Compose labels this tool reads never contain one"
+            },
+            {
+              "range": ">=20.10",
+              "impact": "reading needs whatever the docker socket needs: an account in the `docker` group or a rootless daemon reaches it directly, and otherwise the tool retries the probe once through `sudo -n` and says in the header that it did"
+            }
+          ]
+        },
+        "podman": {
+          "binary": "podman",
+          "minimum": "4.0",
+          "tested": [
+            "5.8.1"
+          ],
+          "features": [
+            {
+              "name": "quadlet",
+              "since": "4.4"
+            },
+            {
+              "name": "compose",
+              "since": "4.7"
+            },
+            {
+              "name": "update-restart",
+              "since": "5.0"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<4.4",
+              "impact": "Quadlet did not exist, so the `~/.config/containers/systemd` and `/etc/containers/systemd` directories are not read and no unit files are listed on the engines screen"
+            },
+            {
+              "range": "<4.7",
+              "impact": "`podman compose` does not exist, so a Compose project is listed and grouped but cannot be driven from here. Before 4.7 a project was run by calling podman-compose directly, which takes different arguments"
+            },
+            {
+              "range": "<5.0",
+              "impact": "`podman update --restart` does not exist — `podman update` arrived in 4.3 carrying only the resource limits — so the restart policy key refuses with that reason instead of running a command Podman would reject"
+            },
+            {
+              "range": ">=4.0",
+              "impact": "rootless and root are two separate sets of containers, not two views of one. Both are listed when both answer; root's are read through `sudo -n`, and where that needs a password the screen says the system scope was not read"
+            },
+            {
+              "range": ">=4.0",
+              "impact": "an infra container — the pause process holding a pod's namespaces open — is dropped from the list. It runs nothing anyone wrote, and showing one per pod would be an unexplained extra row"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-containers",
+      "page": "https://tui.tools/tools/tui-containers/",
+      "changelog": "https://github.com/tui-tools/tui-containers/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-cron",
+      "package": "tui-cron",
+      "binary": "tui-cron",
+      "tagline": "Every scheduled job on one screen, systemd timers and cron together",
+      "description": "A terminal UI for everything scheduled on a machine. systemd timers and cron are two schedulers with two syntaxes, two sets of commands and two ways of reporting what happened; tui-cron puts them on one list — the name, the schedule as written, the next run, the last run and how it went.\n\nNext to every expression is what it means, in English. `17 3 * * 1` and `*-*-01..07 12:00:00` are both precise and neither is readable, and the mistakes people make with them are mistakes of reading. The reading is generated by the tool's own describer for cron and for OnCalendar, and the detail screen adds the next five runs as `systemd-analyze calendar` computes them.\n\nChanges are previewed. A timer's schedule goes to a drop-in — the unit file is never rewritten — checked with `systemd-analyze calendar` first. A crontab is replaced through `crontab <file>`, cron's own interface, with the diff on screen. A cron line can be converted into a timer, written but deliberately not enabled.\n\nRun `tui-cron --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "scheduling",
+      "icon": "https://tui.tools/tools/tui-cron/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-cron/tui-cron-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T14:02:40Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "systemd",
+        "cron"
+      ],
+      "compat": {
+        "systemd": {
+          "binary": "systemctl",
+          "minimum": "245",
+          "tested": [
+            "255",
+            "259",
+            "261"
+          ],
+          "features": [
+            {
+              "name": "timers-json",
+              "since": "250"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<250",
+              "impact": "`systemctl list-timers --output=json` does not exist, so the timers are enumerated from `systemctl list-units --type=timer` instead; nothing is lost, because every column shown is read from `systemctl show` either way"
+            },
+            {
+              "range": ">=245",
+              "impact": "`systemd-analyze calendar --iterations` is what computes the next runs and validates a new OnCalendar. It arrived in 242, below this minimum, so it is not gated: on every version this tool supports it is simply there"
+            },
+            {
+              "range": ">=245",
+              "impact": "a timer in your own manager is read through `systemctl --user`, which needs a user bus; over a serial console or a bare `sudo -i` shell there is none, and the tool says the user timers were not read rather than that there are none"
+            }
+          ]
+        },
+        "cron": {
+          "binary": "crontab",
+          "minimum": null,
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=1",
+              "impact": "cron declares no version command. cronie answers `crontab -V` with \"cronie 1.7.2\"; Debian's vixie cron has no such flag and no sibling program that prints one, so a version would appear on Fedora and be blank on Ubuntu. The header shows cron without a number"
+            },
+            {
+              "range": ">=1",
+              "impact": "there is no portable way to have cron check a table: cronie ships `crontab -T`, Debian's cron ships nothing equivalent. A line is therefore parsed by this tool before it is written, with the same check on every machine"
+            },
+            {
+              "range": ">=1",
+              "impact": "cron records that a command started, and cronie also that it returned; neither records an exit status anywhere. A cron job's last result is therefore \"it ran\" at best, and the screen says so rather than implying it worked"
+            },
+            {
+              "range": ">=1",
+              "impact": "a machine may have no cron at all — Omarchy Server is one — and that is a normal machine, not a failure: the timers are listed, and cron reports itself as absent with the reason"
+            },
+            {
+              "range": ">=1",
+              "impact": "a machine with no cron may still carry run-parts scripts: Omarchy Server ships /etc/cron.hourly/snapper and nothing that walks the directory. They are listed anyway, and each row says nothing runs it rather than showing a file that looks scheduled as active"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-cron",
+      "page": "https://tui.tools/tools/tui-cron/",
+      "changelog": "https://github.com/tui-tools/tui-cron/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-disk",
+      "package": "tui-disk",
+      "binary": "tui-disk",
+      "tagline": "Disks, mounts, fstab, btrfs and SMART, previewed before every change",
+      "description": "A terminal UI for the machine's storage. Five screens over one read: the block devices with their filesystems and usage bars, the mount table crossed against `/etc/fstab`, the btrfs filesystems in full, the SMART health of every drive, and what `df` says about free space.\n\nThe mounts screen is the one that earns its keep. It shows what is mounted now next to what fstab says will be mounted next boot, and marks every row where those disagree: a filesystem mounted by hand that will vanish on reboot, an fstab entry that failed to mount and nobody noticed, and options fstab asks for that are not in effect.\n\nChanges are previewed. Mounting and unmounting an entry, starting or cancelling a btrfs scrub or balance, starting a drive self-test, and editing `/etc/fstab` — which is validated with `findmnt --verify` against the staged file BEFORE the dialog opens, shown as a unified diff, then installed and applied with `systemctl daemon-reload` — all carry the exact command line.\n\nRun `tui-disk --demo` to drive a sample machine: an NVMe root on btrfs, a spinning disk with two reallocated sectors, a USB stick mounted by hand and one fstab mismatch. Nothing touches your system.",
+      "category": "storage",
+      "icon": "https://tui.tools/tools/tui-disk/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-disk/tui-disk-devices.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T14:03:24Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "util-linux",
+        "btrfs-progs",
+        "smartmontools"
+      ],
+      "compat": {
+        "util-linux": {
+          "binary": "lsblk",
+          "minimum": "2.34",
+          "tested": [
+            "2.39.3",
+            "2.41.5",
+            "2.42.2"
+          ],
+          "features": [
+            {
+              "name": "mountpoints",
+              "since": "2.37"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<2.37",
+              "impact": "lsblk has no `MOUNTPOINTS` column, so the single-valued `MOUNTPOINT` is asked for instead; a device mounted at several paths reports only the first one. lsblk fails the whole call on a column name it does not know, so this is a gate rather than a fallback"
+            },
+            {
+              "range": ">=2.34",
+              "impact": "`blkid` reads /dev directly and answers an unprivileged caller with an empty body and exit 0, so the fstab editor's device picker escalates with `sudo -n` and falls back to the UUIDs lsblk already reported when it cannot"
+            }
+          ]
+        },
+        "btrfs-progs": {
+          "binary": "btrfs",
+          "minimum": "5.10",
+          "tested": [
+            "6.6.3",
+            "6.19.1",
+            "7.1"
+          ],
+          "features": [
+            {
+              "name": "json-output",
+              "since": "5.15"
+            }
+          ],
+          "notes": [
+            {
+              "range": ">=5.10",
+              "impact": "`--format json` is supported per command, not globally: `device stats` and `filesystem df` emit JSON, while `filesystem usage`, `subvolume list`, `scrub status` and `balance status` refuse it through 6.19 at least, so those four are read from their text output"
+            },
+            {
+              "range": ">=5.10",
+              "impact": "`subvolume list`, `qgroup show` and `balance status` refuse an unprivileged caller with \"Operation not permitted\"; they are retried with `sudo -n`, and a machine that cannot escalate shows those sections empty with a note saying so"
+            },
+            {
+              "range": "<5.15",
+              "impact": "no `--format json` at all, so `device stats` is read from its text output too"
+            }
+          ]
+        },
+        "smartmontools": {
+          "binary": "smartctl",
+          "minimum": "7.0",
+          "tested": [],
+          "features": [
+            {
+              "name": "json-output",
+              "since": "7.0"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<7.0",
+              "impact": "`smartctl --json` does not exist, and the health of every drive is reported as unknown rather than scraped out of a table meant for human eyes"
+            },
+            {
+              "range": ">=7.0",
+              "impact": "reading SMART needs the raw device, so it escalates with `sudo -n`; a drive behind a USB bridge that passes no SMART through, and a virtual disk that has no firmware, both come back unknown with the reason smartctl gave"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-disk",
+      "page": "https://tui.tools/tools/tui-disk/",
+      "changelog": "https://github.com/tui-tools/tui-disk/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-firewall",
+      "package": "tui-firewall",
+      "binary": "tui-firewall",
+      "tagline": "ufw and firewalld, with every change previewed before it runs",
+      "description": "A terminal UI for the Linux firewall, driving **ufw** and **firewalld**. It shows the rules you actually have — action, ports, source, destination, services, rich rules, IPv6 and forwarding included — alongside the default policies or zone targets and the logging level.\n\nThe UI never builds a command line. It talks to a backend behind an interface, which returns a firewall-neutral model and produces command values; the confirm dialog shows those values and hands the same ones to the runner, so what you read is what executes. On firewalld that means both lines: the change to the running firewall and the same change made permanent, with no reload and no dropped connections.\n\nRun `tui-firewall --demo` for an in-memory ufw, or `tui-firewall --demo=firewalld` for an in-memory firewalld: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "firewall",
+      "icon": "https://tui.tools/tools/tui-firewall/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-firewall/tui-firewall-main.png",
+      "version": "0.2.2",
+      "released": "2026-08-30T13:37:16Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "ufw",
+        "firewalld"
+      ],
+      "compat": {
+        "ufw": {
+          "binary": "ufw",
+          "minimum": "0.36",
+          "tested": [
+            "0.36.2"
+          ],
+          "features": [
+            {
+              "name": "rule-comments",
+              "since": "0.35"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<0.36",
+              "impact": "`ufw status numbered` has no app profile column, so a rule added from a profile is shown by its ports and cannot be edited as a profile"
+            },
+            {
+              "range": "0.36.x",
+              "impact": "`status numbered` indexes IPv4 and IPv6 halves of one rule separately, so deleting by number renumbers the rest and the list is re-read after every delete"
+            }
+          ]
+        },
+        "firewalld": {
+          "binary": "firewall-cmd",
+          "minimum": "0.9",
+          "tested": [
+            "2.4.4"
+          ],
+          "features": [],
+          "notes": [
+            {
+              "range": "==2.0.0",
+              "impact": "`--permanent --list-all-zones` prints the same settings for every zone on this release (firewalld#1152), so the permanent half of the runtime/permanent comparison is not trustworthy; 2.0.1 fixed it"
+            },
+            {
+              "range": ">=2.2",
+              "impact": "firewalld removed the lockdown feature, so no lockdown state is shown"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-firewall",
+      "page": "https://tui.tools/tools/tui-firewall/",
+      "changelog": "https://github.com/tui-tools/tui-firewall/releases/tag/v0.2.2"
+    },
+    {
+      "name": "tui-logs",
+      "package": "tui-logs",
+      "binary": "tui-logs",
+      "tagline": "The journal on one screen: narrow it, follow it, and shrink it safely",
+      "description": "A terminal UI for the systemd journal. Every filter it offers is a journalctl argument — unit, priority, boot, time window, `--grep`, kernel only, the user journal — and the command line they add up to is on the status bar, so what you are looking at is always something you could have typed.\n\nPress enter on a line and you get the record rather than the sentence: the pid, the uid, the executable and its command line, the source file and line for a program that logs through sd-journal, the MESSAGE_ID with a name for the well-known ones, and every other field the journal happened to carry. There is no clipboard to copy it with, so the screen shows the `journalctl --cursor` invocation that prints that entry instead.\n\nA second screen counts the window on show: errors, the noisiest units, a sparkline. A third says what the journal costs, whether it survives a reboot, and what journald.conf resolves to.\n\nHousekeeping is four commands, each previewed and confirmed: vacuum by size, vacuum by age, rotate, verify. Nothing else here writes anything.\n\nRun `tui-logs --demo` to drive a sample journal: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "logs",
+      "icon": "https://tui.tools/tools/tui-logs/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-logs/tui-logs-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T13:53:53Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "journald"
+      ],
+      "compat": {
+        "journald": {
+          "binary": "journalctl",
+          "minimum": "239",
+          "tested": [
+            "255",
+            "259",
+            "261"
+          ],
+          "features": [
+            {
+              "name": "list-boots-json",
+              "since": "252"
+            }
+          ],
+          "notes": [
+            {
+              "range": ">=239",
+              "impact": "the version comes from `journalctl --version`, whose first line is `systemd 257 (257.13-1.fc42)`; the first number is the release and the package version after it is ignored"
+            },
+            {
+              "range": ">=239",
+              "impact": "only one thing here is version-gated. `--grep` (237), `--after-cursor` (206) and `systemd-analyze cat-config` (239) all exist at or below the minimum, so they are never checked for"
+            },
+            {
+              "range": "<252",
+              "impact": "`journalctl --list-boots` cannot print JSON, so the boot list is parsed from its table instead; the picker works either way and nothing else changes"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-logs",
+      "page": "https://tui.tools/tools/tui-logs/",
+      "changelog": "https://github.com/tui-tools/tui-logs/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-network",
+      "package": "tui-network",
+      "binary": "tui-network",
+      "tagline": "Links, addresses, routes and DNS, with every change previewed before it runs",
+      "description": "A terminal UI for the machine's network. It shows the links you actually have — state, type, addresses, gateway, MAC, MTU and driver — with the routing table, what systemd-resolved is using for DNS, and the `.network` file behind each link.\n\nOpen a link and you get the whole picture in one screen: its addresses and where each came from, its routes, its DNS servers and search domains, its DHCP lease, the `.network` file that configures it, and what systemd-networkd has been saying about it in the journal.\n\nChanges are previewed. Bringing a link up or down, reconfiguring it, renewing a lease, setting DNS at runtime, and editing a `.network` file — which shows a unified diff and then installs the file and reloads networkd — all go through a confirm dialog carrying the exact command line. A link systemd-networkd does not manage, because NetworkManager owns it, is shown read-only with the reason.\n\nRun `tui-network --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "network",
+      "icon": "https://tui.tools/tools/tui-network/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-network/tui-network-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T13:57:01Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "systemd-networkd"
+      ],
+      "compat": {
+        "systemd-networkd": {
+          "binary": "networkctl",
+          "minimum": "245",
+          "tested": [
+            "255",
+            "257",
+            "259",
+            "261"
+          ],
+          "features": [
+            {
+              "name": "json-status",
+              "since": "249"
+            },
+            {
+              "name": "link-up-down",
+              "since": "249"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<249",
+              "impact": "`networkctl --json` does not exist, so the columns of `networkctl list` and the `Key: value` block of `networkctl status` are parsed instead; addresses carry no prefix length there, and the DHCP lease clock is not reported at all"
+            },
+            {
+              "range": "<249",
+              "impact": "`networkctl up` and `down` do not exist; the keys are dropped from the hint bar and reconfigure is offered in their place"
+            },
+            {
+              "range": ">=245",
+              "impact": "no released systemd emits JSON from `resolvectl status`, so DNS servers and search domains are read from the text output of `resolvectl dns` and `resolvectl domain`"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-network",
+      "page": "https://tui.tools/tools/tui-network/",
+      "changelog": "https://github.com/tui-tools/tui-network/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-samba",
+      "package": "tui-samba",
+      "binary": "tui-samba",
+      "tagline": "Samba shares, accounts and live connections, with every change previewed",
+      "description": "A terminal UI for a Samba file server: the shares it exports, the accounts that can reach them, and who is connected right now.\n\nThe shares are listed worst first. A path that does not exist, a directory somebody left at mode 0777, a writable share open to guests — each one is a sentence on the row rather than something to work out from `testparm` output and a `stat`. The configuration comes from `testparm -s`, which is what the server resolved rather than what anybody typed, and every share carries the Unix permissions, the owner and the SELinux label of the directory behind it.\n\nA change goes through Samba's own parser before it goes anywhere near /etc. A share is edited in a guided form, staged to a file, read back with `testparm -s` and shown as a diff — and only then confirmed. It is installed with `install -m 644` and picked up with `smbcontrol all reload-config`, which disconnects nobody.\n\nThis is a file server tool. Samba as an Active Directory domain controller is deliberately out of scope.\n\nRun `tui-samba --demo` to drive a sample server: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "file-sharing",
+      "icon": "https://tui.tools/tools/tui-samba/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-samba/tui-samba-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T13:53:29Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "samba"
+      ],
+      "compat": {
+        "samba": {
+          "binary": "smbd",
+          "minimum": "4.11",
+          "tested": [
+            "4.24.6"
+          ],
+          "features": [
+            {
+              "name": "status-json",
+              "since": "4.17"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<4.17",
+              "impact": "`smbstatus --json` does not exist, so the connections are read from the text output; the sessions, the shares in use and the open files are all there, and the per-session encryption is whatever those columns carry"
+            },
+            {
+              "range": ">=4.17",
+              "impact": "`smbstatus --json` is used, so a session's dialect, signing and encryption come from Samba's own document instead of from columns separated by runs of spaces a value may also contain"
+            },
+            {
+              "range": ">=4.11",
+              "impact": "SMB1 is off by default from this release, so a `server min protocol` below SMB2 is something somebody set on purpose — which is why tui-samba raises it and says nothing about a server on the default"
+            },
+            {
+              "range": ">=4.11",
+              "impact": "`testparm --show-all-parameters` is not used at all: it prints every parameter Samba has rather than this server's, so the effective configuration comes from `testparm -s`"
+            },
+            {
+              "range": ">=4.11",
+              "impact": "a machine may have no Samba at all, and that is a normal machine rather than a failure: the tool says so on its first screen and `--check` reports it as `\"installed\": false` and exits 0"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-samba",
+      "page": "https://tui.tools/tools/tui-samba/",
+      "changelog": "https://github.com/tui-tools/tui-samba/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-secure",
+      "package": "tui-secure",
+      "binary": "tui-secure",
+      "tagline": "The machine's security posture, with the command behind every verdict",
+      "description": "A terminal UI for the security posture of one Linux machine. Eight probes — Secure Boot, the MAC layer, the firewall, sshd, pending updates, accounts, kernel hardening and listening ports — each answered `ok`, `warn`, `bad` or `unknown`, with a score across the lot.\n\nEvery verdict shows its work. Open a probe and you get the exact command that was run, the line it judged, the full raw output underneath, and a fix that names either the sibling tool that owns the change (`tui-firewall`, `tui-update`) or the command to run yourself.\n\nIt reads first and asks second. Nothing escalates beyond `sudo -n`, which never prompts, so a probe that needs root it cannot get degrades to `unknown` with the reason instead of hanging on a password. Three fixes are offered inline — enabling ufw, setting one kernel hardening key with its drop-in, enabling the update timer — and each is previewed as the exact command line and confirmed first.\n\nRun `tui-secure --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "security",
+      "icon": "https://tui.tools/tools/tui-secure/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-secure/tui-secure-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T13:58:02Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "systemd",
+        "openssh",
+        "ufw",
+        "firewalld",
+        "sbctl"
+      ],
+      "compat": {
+        "systemd": {
+          "binary": "systemctl",
+          "minimum": "245",
+          "tested": [
+            "255",
+            "257",
+            "259",
+            "261"
+          ],
+          "features": [
+            {
+              "name": "journal-grep",
+              "since": "246"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<246",
+              "impact": "`journalctl --grep` does not exist, so the denial and failed-login counts are read by filtering the journal here instead of in journalctl, which is slower on a large journal"
+            }
+          ]
+        },
+        "openssh": {
+          "binary": "sshd",
+          "minimum": "8.2",
+          "tested": [
+            "9.6",
+            "9.9",
+            "10.2",
+            "10.5"
+          ],
+          "features": [
+            {
+              "name": "sshd-test-config",
+              "since": "8.2"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<8.2",
+              "impact": "`sshd -T` predates several of the keywords this probe reads, so the settings come from parsing sshd_config and its drop-ins instead, which does not resolve Match blocks"
+            }
+          ]
+        },
+        "ufw": {
+          "binary": "ufw",
+          "minimum": "0.36",
+          "tested": [
+            "0.36.2"
+          ],
+          "features": [],
+          "notes": [
+            {
+              "range": "<0.36",
+              "impact": "`ufw status verbose` prints no default policy line, so the incoming and outgoing policies are reported as unknown and only the active state is judged"
+            }
+          ]
+        },
+        "firewalld": {
+          "binary": "firewall-cmd",
+          "minimum": "0.9",
+          "tested": [
+            "2.3.2",
+            "2.4.4"
+          ],
+          "features": [],
+          "notes": []
+        },
+        "sbctl": {
+          "binary": "sbctl",
+          "minimum": null,
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=0.1",
+              "impact": "sbctl is optional: without it the Secure Boot probe reports what `bootctl status` knows and says nothing about enrolled keys or signed files"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-secure",
+      "page": "https://tui.tools/tools/tui-secure/",
+      "changelog": "https://github.com/tui-tools/tui-secure/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-snapper",
+      "package": "tui-snapper",
+      "binary": "tui-snapper",
+      "tagline": "btrfs snapshots, managed by snapper, from the terminal",
+      "description": "A terminal UI for the btrfs snapshots `snapper` manages. It lists every config and its history — pre/post pairs from package upgrades next to the hourly timeline snapshots — compares any two of them, and shows what changed file by file, with a read-only diff for anything you want to look at closely.\n\nIt creates, deletes, relabels and cleans up snapshots too, and puts individual files back with `undochange` without touching the rest of the filesystem. Every one of those is shown as the exact `snapper` command line and confirmed before it runs; starting the tool only reads.\n\nRollback is the one thing that genuinely differs between machines, so it is detected rather than assumed: where `snapper rollback` is the mechanism it is offered with a full warning, and on an Omarchy or limine-snapper-sync layout the boot menu entries are read from `/boot/limine.conf` and shown read-only, because that is where the rollback really happens.\n\n`--demo` runs the whole UI against a sample history, so you can try it without a btrfs filesystem to risk.",
+      "category": "snapshots",
+      "icon": "https://tui.tools/tools/tui-snapper/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-snapper/tui-snapper-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T14:13:53Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "snapper"
+      ],
+      "compat": {
+        "snapper": {
+          "binary": "snapper",
+          "minimum": "0.8.6",
+          "tested": [
+            "0.10.6",
+            "0.13.0",
+            "0.13.1"
+          ],
+          "features": [
+            {
+              "name": "undochange-root-paths",
+              "since": "0.10.6"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<0.8.6",
+              "impact": "snapper has no `--jsonout`, and both the config list and the snapshot list are read as JSON, so nothing can be listed at all"
+            },
+            {
+              "range": "<0.10.6",
+              "impact": "`snapper undochange` cannot recreate a path that sits directly under the subvolume root, so putting back a deleted top-level file or directory fails with \"failed to create\""
+            },
+            {
+              "range": "<0.10.7",
+              "impact": "`snapper diff` is broken for LVM-based configs, so the file view comes back empty there even when the compare screen lists the change"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-snapper",
+      "page": "https://tui.tools/tools/tui-snapper/",
+      "changelog": "https://github.com/tui-tools/tui-snapper/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-ssh",
+      "package": "tui-ssh",
+      "binary": "tui-ssh",
+      "tagline": "The SSH server as it really is, with every change previewed before it runs",
+      "description": "A terminal UI for the machine's SSH server. It asks sshd what its configuration actually is — `sshd -T`, not what a file says — and shows the settings that decide who gets in first, each with a verdict and the file and line that set it.\n\nFour more screens complete the picture: who is logged in right now and a way to end a session; what the authentication log says over the last day or week, with the addresses and accounts being tried; the host keys and their fingerprints; and the unit, its sockets and whether a brute-force blocker is installed.\n\nChanges go to a drop-in: tui-ssh never rewrites /etc/ssh/sshd_config. It writes 90-tui-ssh.conf, checks the staged file with `sshd -t -f` before asking anything, and shows the diff and both commands. sshd takes the first value it is given, so the include order is read too: if another file already sets the keyword earlier, the tool says so instead of writing a line that would be ignored.\n\nRun `tui-ssh --demo` to drive a sample server: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "ssh",
+      "icon": "https://tui.tools/tools/tui-ssh/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-ssh/tui-ssh-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T14:03:22Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "openssh"
+      ],
+      "compat": {
+        "openssh": {
+          "binary": "ssh",
+          "minimum": "8.2",
+          "tested": [
+            "9.6",
+            "10.2",
+            "10.5"
+          ],
+          "features": [
+            {
+              "name": "include-dropins",
+              "since": "8.2"
+            },
+            {
+              "name": "kbd-interactive",
+              "since": "8.7"
+            }
+          ],
+          "notes": [
+            {
+              "range": ">=10.5",
+              "impact": "`sshd -T` prints the canonical spelling of every keyword (`PermitRootLogin no`) where 10.2 and earlier lower-case it (`permitrootlogin no`); both forms are parsed to the canonical name, so the verdicts and the source lines are the same either way"
+            },
+            {
+              "range": ">=8.2",
+              "impact": "the version comes from `ssh -V`, which prints to standard error; `sshd -V` only exists from OpenSSH 9.6, so asking the server itself would report nothing over most of the supported range"
+            },
+            {
+              "range": "<8.2",
+              "impact": "`Include` does not exist, so /etc/ssh/sshd_config.d is never read; tui-ssh will not rewrite sshd_config itself, so the editor has nowhere to write and says so"
+            },
+            {
+              "range": "<8.7",
+              "impact": "`KbdInteractiveAuthentication` is still spelled `ChallengeResponseAuthentication`; both are read, and the old name is what gets written"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-ssh",
+      "page": "https://tui.tools/tools/tui-ssh/",
+      "changelog": "https://github.com/tui-tools/tui-ssh/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-systemd",
+      "package": "tui-systemd",
+      "binary": "tui-systemd",
+      "tagline": "systemd units: what failed, why, and every action previewed",
+      "description": "A terminal UI for systemd. It opens on what failed — failed units sort first, always — and puts the journal that explains why one key away. Timers show what is scheduled and when it last fired; the boot view shows what made the last boot slow.\n\nThe unit list merges `list-units --all` with `list-unit-files`, so a unit that is installed but has never started is visible too. Every read works as an ordinary user, so the tool opens instantly and without a password; only an action escalates, and only behind a confirm dialog showing the exact `systemctl` command line.\n\nRun `tui-systemd --demo` for a sample machine with a couple of interesting failures. Nothing touches your system.",
+      "category": "systemd",
+      "icon": "https://tui.tools/tools/tui-systemd/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-systemd/tui-systemd-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T13:51:44Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "systemd"
+      ],
+      "compat": {
+        "systemd": {
+          "binary": "systemctl",
+          "minimum": "230",
+          "tested": [
+            "255",
+            "259",
+            "261"
+          ],
+          "features": [
+            {
+              "name": "timers",
+              "since": "250"
+            },
+            {
+              "name": "boot-blame",
+              "since": "230"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<250",
+              "impact": "`list-timers` has no JSON output, so the timers view is not offered: the text table cannot be parsed without mangling its timestamps"
+            },
+            {
+              "range": "<245",
+              "impact": "`list-units --plain` is absent on some builds, so the unit list falls back to the decorated output"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-systemd",
+      "page": "https://tui.tools/tools/tui-systemd/",
+      "changelog": "https://github.com/tui-tools/tui-systemd/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-template",
+      "package": "tui-template",
+      "binary": "tui-template",
+      "tagline": "A working skeleton for a new tui-tools tool",
+      "description": "The starting point for a new tool in the family. Press **Use this template**, rename it, replace one package, and you have a tool that looks and behaves like the rest.\n\nIt is not a pile of TODOs: it is a working tool. It lists the files in a directory and can update a file's timestamp, which is deliberately trivial — what matters is the shape around it, and that shape is already correct: the action table that generates the key map, the help screen and the confirm dialog; the backend interface with a real and a fake implementation; `--demo`; CI; and GoReleaser.\n\nThis `tool.json` is itself the example. It is a valid manifest, validated against [the schema](https://github.com/tui-tools/tui-kit/blob/main/schema/tool.schema.json) on every CI run, and the values are the ones you replace.",
+      "category": "template",
+      "icon": "https://tui.tools/tools/tui-template/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-template/tui-template-main.png",
+      "version": null,
+      "released": null,
+      "unreleased": true,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "coreutils"
+      ],
+      "compat": {
+        "coreutils": {
+          "binary": "touch",
+          "minimum": "8.0",
+          "tested": [],
+          "features": [
+            {
+              "name": "no-dereference",
+              "since": "8.1"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<8.1",
+              "impact": "`touch -h` is missing, so the timestamp of a symlink is set on its target instead of on the link"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-template",
+      "page": "https://tui.tools/tools/tui-template/",
+      "changelog": null
+    },
+    {
+      "name": "tui-update",
+      "package": "tui-update",
+      "binary": "tui-update",
+      "tagline": "Pending package updates, what they restart, and a snapshot first",
+      "description": "A terminal UI for the updates waiting on your machine. It reads them from whichever package manager the machine actually runs — `pacman`, `apt` or `dnf` — and shows what a list of versions never tells you: what applying them will cost.\n\nEvery pending update is on one screen, with its current and new version, its repository, its size and its security flag where the manager publishes one, and the kernel and firmware sorted to the top because they are what turns an upgrade into a reboot.\n\n`enter` gives you the plan: the manager's own dry run, the restart classification — nothing, the services still holding replaced code open, or a reboot with the reason — whether a `snapper` snapshot can be taken first and the exact command that would take it, and the whole sequence, in order, before anything runs.\n\n`U` applies it behind a confirm dialog carrying that sequence, streaming the output as it goes. It never reboots by itself: when the upgrade needs one it offers `R`, with its own confirmation.\n\nRun `tui-update --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "category": "packages",
+      "icon": "https://tui.tools/tools/tui-update/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-update/tui-update-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T13:55:03Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "pacman",
+        "apt",
+        "dnf"
+      ],
+      "compat": {
+        "pacman": {
+          "binary": "pacman",
+          "minimum": "6.0",
+          "tested": [
+            "7.1.0"
+          ],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=6.0",
+              "impact": "pacman publishes no security metadata, so no update is ever marked as a security fix here; the column reads `n/a` rather than `no`"
+            },
+            {
+              "range": ">=6.0",
+              "impact": "there is no dry run that does not first synchronise the databases, which needs root, so the plan quotes the pending list instead of a simulated transaction"
+            },
+            {
+              "range": ">=6.0",
+              "impact": "`checkupdates` needs pacman-contrib *and* fakeroot, since it builds its private copy of the sync database under it; without either the pending list falls back to `pacman -Qu`, which is whatever the last `pacman -Sy` left on disk, and the screen says so"
+            },
+            {
+              "range": ">=6.0",
+              "impact": "on Omarchy Server the upgrade runs through `omarchy-server-update run --no-reboot`, and `omarchy-server-update-restart --dry-run` is what classifies the restarts; on plain Arch there is no classifier and the package names decide"
+            }
+          ]
+        },
+        "apt": {
+          "binary": "apt",
+          "minimum": "2.0",
+          "tested": [
+            "2.8.3"
+          ],
+          "features": [
+            {
+              "name": "solver3",
+              "since": "2.9.3"
+            }
+          ],
+          "notes": [
+            {
+              "range": ">=2.0",
+              "impact": "a security update is one whose pocket ends in `-security`; apt publishes no advisory id, so that pocket name is the whole reference"
+            },
+            {
+              "range": ">=2.0",
+              "impact": "neither `apt list --upgradable` nor `apt-get -s upgrade` reports a per-package size, so the size column is not shown; the plan carries apt's own download and disk totals instead"
+            },
+            {
+              "range": ">=2.0",
+              "impact": "the services to restart come from `needrestart -b`, which reads other processes' memory maps and therefore needs root; without it the package names decide"
+            }
+          ]
+        },
+        "dnf": {
+          "binary": "dnf",
+          "minimum": "4.0",
+          "tested": [
+            "5.2.18",
+            "5.4.1"
+          ],
+          "features": [
+            {
+              "name": "dnf5",
+              "since": "5.0"
+            }
+          ],
+          "notes": [
+            {
+              "range": ">=5.0",
+              "impact": "`dnf --version` prints `dnf5 version 5.2.18.0`, where dnf4 prints a bare `4.24.0` on its first line; both are read by the same pattern, which keeps three components because a four-part version is not one the family schema records"
+            },
+            {
+              "range": ">=5.0",
+              "impact": "`dnf needs-restarting` refreshes the repository metadata before answering, which a read path must not do, so the standalone `needs-restarting` binary from dnf-plugins-core is used instead and its absence falls back to the package names"
+            },
+            {
+              "range": ">=4.0",
+              "impact": "`dnf check-update` exits 100 when there are updates, so its exit code is interpreted rather than treated as a failure; it also prints only the new version, and the installed one is read from rpm"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-update",
+      "page": "https://tui.tools/tools/tui-update/",
+      "changelog": "https://github.com/tui-tools/tui-update/releases/tag/v0.1.2"
+    },
+    {
+      "name": "tui-users",
+      "package": "tui-users",
+      "binary": "tui-users",
+      "tagline": "Accounts, groups, keys and sudo, with every change previewed before it runs",
+      "description": "A terminal UI for the machine's local accounts. It lists every account with the facts that decide what it can do — uid, primary group, groups, shell, last login, whether the password is usable, locked or missing — and puts the ones worth a second look at the top, with the reason: a second account with uid 0, an empty password, a service account with a login shell.\n\nOpen an account and you get the whole picture: its aging policy in words rather than in days-since-1970, the authorized keys in its `~/.ssh` with their fingerprints, what `sudo` says it may run, and its open sessions. A second screen lists the groups with their real membership, primary members included; a third quotes every rule in `/etc/sudoers` and `/etc/sudoers.d`, marking the ones that run without a password.\n\nChanges are previewed: creating an account, deleting it, locking it, setting a password, editing group membership, changing the shell, setting an expiry, adding or removing an authorized key. A password never reaches a command line — it goes to `chpasswd` on standard input.\n\nRun `tui-users --demo` to drive a sample machine: every key works and nothing touches your system.",
+      "category": "users",
+      "icon": "https://tui.tools/tools/tui-users/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-users/tui-users-main.png",
+      "version": "0.1.2",
+      "released": "2026-08-30T13:55:15Z",
+      "unreleased": false,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "shadow-utils",
+        "openssh"
+      ],
+      "compat": {
+        "shadow-utils": {
+          "binary": "useradd",
+          "minimum": "4.8",
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=4.8",
+              "impact": "shadow-utils prints no version from any of its programs: `useradd --version`, `chage --version` and every sibling answer \"unrecognized option\" on Arch, Debian and Fedora alike. This backend therefore declares no version command, and the header shows none for it"
+            },
+            {
+              "range": ">=4.8",
+              "impact": "the minimum above is informative, not enforced: it is the release whose flags this tool uses (`useradd -r -m -G`, `usermod -L -U -s`, `userdel -r`, `gpasswd -a -d`, `chage -E -M -l`), all far older than any supported distribution"
+            },
+            {
+              "range": ">=4.8",
+              "impact": "reading the lock state and the expiry of an account needs `getent shadow`, which needs root; an unprivileged run lists every account and says the password state is unknown rather than implying it is fine"
+            }
+          ]
+        },
+        "openssh": {
+          "binary": "ssh-keygen",
+          "minimum": "8.2",
+          "tested": [
+            "9.6",
+            "10.2",
+            "10.5"
+          ],
+          "features": [
+            {
+              "name": "security-keys",
+              "since": "8.2"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<8.2",
+              "impact": "`ssh-keygen -l` does not know the `sk-` key types, so a FIDO security key in an authorized_keys file cannot be fingerprinted and adding one is warned about: sshd would ignore the line it wrote"
+            },
+            {
+              "range": "<6.8",
+              "impact": "`ssh-keygen -l` prints MD5 fingerprints rather than SHA256, so the fingerprint column will not match what a modern `ssh-keygen -lf` shows elsewhere"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-users",
+      "page": "https://tui.tools/tools/tui-users/",
+      "changelog": "https://github.com/tui-tools/tui-users/releases/tag/v0.1.2"
+    }
+  ]
+}

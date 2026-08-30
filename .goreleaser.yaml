@@ -1,4 +1,4 @@
-# GoReleaser configuration for tui-template.
+# GoReleaser configuration for tui-tools.
 #
 # One repository, one binary, one tag series:
 #
@@ -10,16 +10,16 @@
 # template in tui-kit/templates/.goreleaser.yaml.
 version: 2
 
-project_name: tui-template
+project_name: tui-tools
 
 before:
   hooks:
     - go mod download
 
 builds:
-  - id: tui-template
-    main: ./cmd/tui-template
-    binary: tui-template
+  - id: tui-tools
+    main: ./cmd/tui-tools
+    binary: tui-tools
     env:
       # Static binaries: no libc dependency, one file to copy anywhere.
       - CGO_ENABLED=0
@@ -34,9 +34,9 @@ builds:
       - -s -w -X main.version={{ .Version }}
 
 archives:
-  - id: tui-template
+  - id: tui-tools
     ids:
-      - tui-template
+      - tui-tools
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     formats:
@@ -54,23 +54,31 @@ archives:
 # GoReleaser cannot read tool.json, so `description` below is a copy of the
 # manifest's tagline. tui-kit/tools/check-nfpm.py asserts the two are
 # identical, and `make manifest` runs it, so the copy cannot drift.
+#
+# This package installs the launcher and nothing else. It must not depend on
+# the tools it can install: a launcher that drags fourteen programs onto a
+# machine has taken the choice the dashboard exists to offer. The bundle that
+# installs the whole family is a separate package — the metapackage that used
+# to be called `tui-tools` in pkgs.tui.tools becomes `tui-tools-all`, so this
+# name belongs to the launcher; that rename is a change in the pkgs repository
+# and not in this one.
 nfpms:
-  - id: tui-template
+  - id: tui-tools
     ids:
-      - tui-template
-    package_name: tui-template
+      - tui-tools
+    package_name: tui-tools
     formats:
       - deb
       - rpm
       - archlinux
     # Each ecosystem's own naming, so the files look native where they land:
-    # tui-template_0.1.0_amd64.deb, tui-template-0.1.0.x86_64.rpm,
-    # tui-template-0.1.0-1-x86_64.pkg.tar.zst.
+    # tui-tools_0.1.0_amd64.deb, tui-tools-0.1.0.x86_64.rpm,
+    # tui-tools-0.1.0-1-x86_64.pkg.tar.zst.
     file_name_template: "{{ .ConventionalFileName }}"
     vendor: tui-tools
-    homepage: https://tui.tools/tools/tui-template/
+    homepage: https://tui.tools/tools/tui-tools/
     maintainer: tui-tools <maintainers@tui.tools>
-    description: "A working skeleton for a new tui-tools tool"
+    description: "Every tui-tools tool in one place, installed through your package manager"
     license: MIT
     # The binary belongs in the distribution's own path, not /usr/local: it
     # arrives through the package manager, so the package manager owns it.
@@ -79,22 +87,50 @@ nfpms:
     priority: optional
     contents:
       - src: README.md
-        dst: /usr/share/doc/tui-template/README.md
+        dst: /usr/share/doc/tui-tools/README.md
       - src: LICENSE
-        dst: /usr/share/doc/tui-template/LICENSE
+        dst: /usr/share/doc/tui-tools/LICENSE
       - src: examples/config.toml
-        dst: /usr/share/doc/tui-template/config.toml
+        dst: /usr/share/doc/tui-tools/config.toml
+    # The family, as a hint and nothing more.
+    #
+    # `suggests` is the weakest relation both ecosystems have: apt lists it
+    # and installs nothing, and dnf treats rpm's Suggests as a weak dependency
+    # it does not pull in — unlike Recommends, which dnf installs by default
+    # and which would therefore turn `dnf install tui-tools` into an install
+    # of the whole family. That is precisely what this package must not do,
+    # so Recommends is not used here.
+    #
+    # pacman has `optdepends`, which is the same idea, but nfpm's archlinux
+    # packager writes only depends, provides, conflicts and replaces: it has
+    # no optdepends field, so the pacman package carries no hint at all rather
+    # than a faked one. The dashboard is where an Arch user reads the list.
+    suggests:
+      - tui-cert
+      - tui-containers
+      - tui-cron
+      - tui-disk
+      - tui-firewall
+      - tui-logs
+      - tui-network
+      - tui-samba
+      - tui-secure
+      - tui-snapper
+      - tui-ssh
+      - tui-systemd
+      - tui-update
+      - tui-users
     # The package owns the binary name, so anything else shipping the same
     # command — an AUR -bin build, a hand-rolled local package — is a
     # conflict rather than a silent overwrite.
     provides:
-      - tui-template
+      - tui-tools
     conflicts:
-      - tui-template-bin
+      - tui-tools-bin
     rpm:
       group: Applications/System
     archlinux:
-      pkgbase: tui-template
+      pkgbase: tui-tools
       packager: tui-tools <maintainers@tui.tools>
 
 checksum:

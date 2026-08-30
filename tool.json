@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
-  "name": "tui-template",
-  "binary": "tui-template",
-  "tagline": "A working skeleton for a new tui-tools tool",
-  "description": "The starting point for a new tool in the family. Press **Use this template**, rename it, replace one package, and you have a tool that looks and behaves like the rest.\n\nIt is not a pile of TODOs: it is a working tool. It lists the files in a directory and can update a file's timestamp, which is deliberately trivial — what matters is the shape around it, and that shape is already correct: the action table that generates the key map, the help screen and the confirm dialog; the backend interface with a real and a fake implementation; `--demo`; CI; and GoReleaser.\n\nThis `tool.json` is itself the example. It is a valid manifest, validated against [the schema](https://github.com/tui-tools/tui-kit/blob/main/schema/tool.schema.json) on every CI run, and the values are the ones you replace.",
-  "category": "template",
-  "homepage": "https://github.com/tui-tools/tui-template",
-  "repo": "https://github.com/tui-tools/tui-template",
+  "name": "tui-tools",
+  "binary": "tui-tools",
+  "tagline": "Every tui-tools tool in one place, installed through your package manager",
+  "description": "The launcher of the [tui-tools](https://tui.tools) family. Every tool of the family is a card: what it does, whether this machine has it, which version, and whether the repository offers a newer one.\n\nInstall, update and remove go through the distribution's own package manager — `apt`, `dnf` or `pacman` — and each one is previewed as the exact command line and confirmed before it runs. `enter` hands the terminal to an installed tool and takes it back when the tool exits.\n\nThe catalog it reads only says which tools exist and what they are called. It never decides what reaches the machine: your package manager verifies the signed repository index and the signed package, and no name from the catalog reaches a command line unless it matched `tui-<word>` twice. A snapshot of the catalog is built into the binary, so the dashboard works with no network at all.\n\nIf the repository is not configured yet, `s` shows the setup for your distribution with the signing key pinned by fingerprint.\n\nRun `tui-tools --demo` for a sample machine where every key works and nothing is installed, removed or started.",
+  "category": "packages",
+  "homepage": "https://github.com/tui-tools/tui-tools",
+  "repo": "https://github.com/tui-tools/tui-tools",
   "license": "MIT",
+  "unreleased": true,
   "platforms": [
     "linux/amd64",
     "linux/arm64"
@@ -16,30 +17,54 @@
   "logo": "assets/logo.png",
   "screenshots": [
     {
-      "path": "docs/screenshots/tui-template-main.png",
-      "caption": "The list: the four bands every tool in the family draws"
+      "path": "docs/screenshots/tui-tools-main.png",
+      "caption": "The dashboard: every tool of the family, what this machine has, and what the repository offers"
     },
     {
-      "path": "docs/screenshots/tui-template-touch.png",
-      "caption": "The confirm dialog, showing the exact command line before it runs"
+      "path": "docs/screenshots/tui-tools-install.png",
+      "caption": "The confirm dialog, carrying every command of the install before the first one runs"
     },
     {
-      "path": "docs/screenshots/tui-template-help.png",
-      "caption": "The help screen, generated from the action table"
+      "path": "docs/screenshots/tui-tools-repo.png",
+      "caption": "The repository setup, with the signing key pinned by fingerprint"
+    },
+    {
+      "path": "docs/screenshots/tui-tools-filter.png",
+      "caption": "The filter, across name, tagline, category and state"
+    },
+    {
+      "path": "docs/screenshots/tui-tools-help.png",
+      "caption": "The help screen, and the two sentences the trust boundary comes down to"
     }
   ],
   "keys": [
     {
-      "key": "t",
-      "action": "Touch the selected file"
+      "key": "enter",
+      "action": "Launch the selected tool, and come back to the dashboard when it exits"
+    },
+    {
+      "key": "i",
+      "action": "Install it, through this machine's package manager"
+    },
+    {
+      "key": "u",
+      "action": "Update it"
+    },
+    {
+      "key": "x / d",
+      "action": "Remove it; nothing it pulled in is autoremoved"
+    },
+    {
+      "key": "s",
+      "action": "Set the tui-tools repository up, with the key pinned by fingerprint"
+    },
+    {
+      "key": "r",
+      "action": "Re-read the catalog and the machine"
     },
     {
       "key": "/",
-      "action": "Filter the list"
-    },
-    {
-      "key": "r / ctrl+r",
-      "action": "Re-read the directory"
+      "action": "Filter by name, tagline, category or state"
     },
     {
       "key": "?",
@@ -52,85 +77,154 @@
   ],
   "backends": [
     {
-      "name": "coreutils",
-      "binary": "touch",
+      "name": "pacman",
+      "binary": "pacman",
       "versionCommand": [
-        "touch",
+        "pacman",
         "--version"
       ],
-      "versionRegex": "coreutils\\) ([0-9][0-9.]*)",
-      "minimum": "8.0",
+      "versionRegex": "Pacman v([0-9][0-9.]*)",
+      "minimum": "6.0",
       "searchPaths": [
-        "/usr/bin/touch",
-        "/bin/touch"
-      ],
-      "features": [
-        {
-          "name": "no-dereference",
-          "since": "8.1"
-        }
+        "/usr/bin/pacman",
+        "/bin/pacman"
       ],
       "notes": [
         {
-          "range": "<8.1",
-          "impact": "`touch -h` is missing, so the timestamp of a symlink is set on its target instead of on the link"
+          "range": ">=6.0",
+          "impact": "Arch has no supported way to upgrade one package against a refreshed database without upgrading the machine with it, so an update here is `pacman -Syu` with the tool named, and the confirm dialog says so before it runs"
+        },
+        {
+          "range": ">=6.0",
+          "impact": "the repository setup writes a `[tui-tools]` section under /etc/pacman.d and adds one Include line to pacman.conf, so a later setup finds it again instead of appending a second block"
+        }
+      ],
+      "tested": []
+    },
+    {
+      "name": "apt",
+      "binary": "apt",
+      "versionCommand": [
+        "apt",
+        "--version"
+      ],
+      "versionRegex": "apt ([0-9][0-9.]*)",
+      "minimum": "2.0",
+      "searchPaths": [
+        "/usr/bin/apt",
+        "/bin/apt"
+      ],
+      "tested": [],
+      "notes": [
+        {
+          "range": ">=2.0",
+          "impact": "the available version comes from `apt-cache policy`, which reads the lists already on disk; a repository added a moment ago reports nothing until the refresh, which is the first previewed step of an install rather than something the read path does behind you"
+        }
+      ]
+    },
+    {
+      "name": "dnf",
+      "binary": "dnf",
+      "versionCommand": [
+        "dnf",
+        "--version"
+      ],
+      "versionRegex": "([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)",
+      "minimum": "4.0",
+      "searchPaths": [
+        "/usr/bin/dnf",
+        "/bin/dnf"
+      ],
+      "features": [
+        {
+          "name": "dnf5",
+          "since": "5.0"
+        }
+      ],
+      "tested": [],
+      "notes": [
+        {
+          "range": ">=5.0",
+          "impact": "`dnf --version` prints `dnf5 version 5.2.18.0`, where dnf4 prints a bare `4.24.0` on its first line; both are read by the same pattern, which keeps three components because a four-part version is not one the family schema records"
+        },
+        {
+          "range": ">=4.0",
+          "impact": "the available version comes from `dnf repoquery`, which answers from the cache on disk, so a machine whose metadata has expired reports what it last fetched rather than refreshing behind you"
         }
       ]
     }
   ],
   "install": {
     "repo_url": "https://pkgs.tui.tools",
-    "source": {
-      "available": true,
-      "command": "git clone https://github.com/tui-tools/tui-template\ncd tui-template && make demo",
-      "url": "https://github.com/tui-tools/tui-template",
-      "note": "Or press \"Use this template\" on GitHub, which is the point of it."
-    },
     "pacman": {
       "available": false,
-      "package": "tui-template",
+      "package": "tui-tools",
       "repo": "tui-tools",
       "requires_repo_setup": true,
-      "command": "sudo pacman -S tui-template",
+      "command": "sudo pacman -S tui-tools",
       "url": "https://pkgs.tui.tools/arch",
-      "note": "The template is never packaged. Your tool's channel turns available once its first release lands in pkgs.tui.tools."
+      "note": "Upgrades then arrive with the rest of your system updates."
+    },
+    "aur": {
+      "available": false,
+      "package": "tui-tools-bin",
+      "repo": "aur",
+      "command": "paru -S tui-tools-bin",
+      "url": "https://aur.archlinux.org/packages/tui-tools-bin",
+      "note": "The -bin package installs the released static binary."
     },
     "apt": {
       "available": false,
-      "package": "tui-template",
+      "package": "tui-tools",
       "repo": "tui-tools",
       "requires_repo_setup": true,
-      "command": "sudo apt install tui-template",
+      "command": "sudo apt install tui-tools",
       "url": "https://pkgs.tui.tools/deb",
-      "note": "The template is never packaged. Your tool's channel turns available once its first release lands in pkgs.tui.tools."
+      "note": "Upgrades then arrive with the rest of your system updates."
     },
     "dnf": {
       "available": false,
-      "package": "tui-template",
+      "package": "tui-tools",
       "repo": "tui-tools",
       "requires_repo_setup": true,
-      "command": "sudo dnf install tui-template",
+      "command": "sudo dnf install tui-tools",
       "url": "https://pkgs.tui.tools/rpm",
-      "note": "The template is never packaged. Your tool's channel turns available once its first release lands in pkgs.tui.tools."
+      "note": "Upgrades then arrive with the rest of your system updates."
+    },
+    "zypper": {
+      "available": false,
+      "package": "tui-tools",
+      "repo": "tui-tools",
+      "requires_repo_setup": true,
+      "command": "sudo zypper install tui-tools",
+      "url": "https://pkgs.tui.tools/rpm",
+      "note": "The rpm repository is shared with dnf; zypper support is not tested yet."
     },
     "binary": {
       "available": false,
-      "pattern": "tui-template_{version}_linux_{arch}.tar.gz",
-      "command": "curl -fsSL https://github.com/tui-tools/tui-template/releases/download/v{version}/tui-template_{version}_linux_{arch}.tar.gz | tar -xz tui-template\nsudo install -m0755 tui-template /usr/local/bin/tui-template",
-      "url": "https://github.com/tui-tools/tui-template/releases",
-      "note": "The template is never released. Your tool is, once you tag v0.1.0."
+      "pattern": "tui-tools_{version}_linux_{arch}.tar.gz",
+      "command": "curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v{version}/tui-tools_{version}_linux_{arch}.tar.gz | tar -xz tui-tools\nsudo install -m0755 tui-tools /usr/local/bin/tui-tools",
+      "url": "https://github.com/tui-tools/tui-tools/releases",
+      "note": "One static binary. Verify it against checksums.txt from the same release."
+    },
+    "source": {
+      "available": true,
+      "command": "git clone https://github.com/tui-tools/tui-tools\ncd tui-tools && make build\nsudo install -m0755 bin/tui-tools /usr/local/bin/tui-tools",
+      "url": "https://github.com/tui-tools/tui-tools",
+      "note": "Needs Go 1.27 or newer."
     }
   },
   "security": {
-    "needs_sudo": "Only the touch action escalates, and only when the configured prefix is non-empty. Listing a directory is an ordinary read. Replace this sentence with what your own tool escalates for.",
+    "needs_sudo": "Reads are unprivileged: which tools are installed and which the repositories offer are local database queries any user may make. Escalation is `sudo -n`, which never prompts, and covers only the installs, updates, removals and the repository setup you confirmed.",
     "preview_before_run": true,
     "no_daemon": true,
-    "no_network": true,
+    "no_network": false,
+    "no_network_note": "It fetches https://tui.tools/catalog.json, the list of tools and their versions. The catalog only informs: nothing from it reaches a command line except a name matching `tui-<word>`, and the package manager verifies the signed repository. `--offline` uses the snapshot in the binary.",
     "static_binary": true,
-    "signed_releases": false,
+    "signed_releases": true,
     "config_paths": [
-      "/etc/tui-template/config.toml",
-      "~/.config/tui-template/config.toml"
+      "/etc/tui-tools/config.toml",
+      "~/.config/tui-tools/config.toml"
     ]
   },
   "maintainers": [
@@ -139,12 +233,5 @@
       "github": "edimarlnx"
     }
   ],
-  "since": "2026-08-29",
-  "keywords": [
-    "template",
-    "scaffold",
-    "bubbletea",
-    "starter"
-  ],
-  "unreleased": true
+  "since": "2026-08-30"
 }

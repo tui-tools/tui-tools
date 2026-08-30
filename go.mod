@@ -1,11 +1,11 @@
-module github.com/tui-tools/tui-template
+module github.com/tui-tools/tui-tools
 
 go 1.27.0
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/tui-tools/tui-kit v0.2.5
+	github.com/tui-tools/tui-kit v0.2.6
 )
 
 require (
