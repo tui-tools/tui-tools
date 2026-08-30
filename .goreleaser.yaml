@@ -67,6 +67,13 @@ nfpms:
     ids:
       - tui-tools
     package_name: tui-tools
+    # The name used to belong to the "install everything" metapackage of
+    # pkgs.tui.tools, versioned by date (2026.08.30-5). A machine holding it
+    # is offered this package only if this one compares higher, and no
+    # semantic version ever beats a date; the epoch is what makes 1:0.1.0
+    # the newer of the two. It is written into the deb Version, the rpm
+    # Epoch and the pacman pkgver alike, and it never goes away.
+    epoch: "1"
     formats:
       - deb
       - rpm
