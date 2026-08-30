@@ -8,7 +8,7 @@
   "homepage": "https://github.com/tui-tools/tui-tools",
   "repo": "https://github.com/tui-tools/tui-tools",
   "license": "MIT",
-  "unreleased": true,
+  "unreleased": false,
   "platforms": [
     "linux/amd64",
     "linux/arm64"
@@ -157,7 +157,7 @@
   "install": {
     "repo_url": "https://pkgs.tui.tools",
     "pacman": {
-      "available": false,
+      "available": true,
       "package": "tui-tools",
       "repo": "tui-tools",
       "requires_repo_setup": true,
@@ -174,7 +174,7 @@
       "note": "The -bin package installs the released static binary."
     },
     "apt": {
-      "available": false,
+      "available": true,
       "package": "tui-tools",
       "repo": "tui-tools",
       "requires_repo_setup": true,
@@ -183,7 +183,7 @@
       "note": "Upgrades then arrive with the rest of your system updates."
     },
     "dnf": {
-      "available": false,
+      "available": true,
       "package": "tui-tools",
       "repo": "tui-tools",
       "requires_repo_setup": true,
@@ -201,7 +201,7 @@
       "note": "The rpm repository is shared with dnf; zypper support is not tested yet."
     },
     "binary": {
-      "available": false,
+      "available": true,
       "pattern": "tui-tools_{version}_linux_{arch}.tar.gz",
       "command": "curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v{version}/tui-tools_{version}_linux_{arch}.tar.gz | tar -xz tui-tools\nsudo install -m0755 tui-tools /usr/local/bin/tui-tools",
       "url": "https://github.com/tui-tools/tui-tools/releases",
