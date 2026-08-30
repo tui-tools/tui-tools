@@ -2,7 +2,7 @@
 
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/tui-tools/tui-tools/badge)](https://scorecard.dev/viewer/?uri=github.com/tui-tools/tui-tools)
 
-> **Beta.** Beta: the family is days old and still changing. Package names, flags and keys may move without notice until 1.0. Pin versions, and report what breaks.
+> **Beta.** The family is days old and still changing. Package names, flags and keys may move without notice until 1.0. Pin versions, and report what breaks.
 
 The launcher of the [tui-tools](https://tui.tools) family. Every tool of the
 family is a card: what it does, whether this machine has it, which version, and
