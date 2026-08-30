@@ -226,6 +226,42 @@ else
   fail=$((fail + 1))
 fi
 
+# --- the report block ------------------------------------------------------
+#
+# --report is read-only and unprivileged, so it is smoked without sudo: a user
+# who cannot escalate is exactly the one who most needs to be able to file a
+# usable bug. What is asserted is that it agrees with the manager this machine
+# is really driven by, that it still answers under --demo, and that it keeps
+# its privacy promise — the block goes into a public issue, so a home path or
+# the host name appearing in it is a bug, not a cosmetic detail.
+check "report names the package manager" \
+  "$bin --report" \
+  "^backend: $manager"
+
+check "report says the run was live" \
+  "$bin --report" \
+  '^mode: live$'
+
+check "report says where the tool list came from" \
+  "$bin --report" \
+  '^catalog: (live|snapshot)'
+
+check "report works in demo mode too" \
+  "$bin --demo --report" \
+  '^backend: demo$'
+
+check "and says so on the mode line" \
+  "$bin --demo --report" \
+  '^mode: demo'
+
+# The distro and kernel lines are quoted from the machine's own description of
+# itself, and a host named after its distribution ("fedora" on Fedora) would
+# match there without anything having leaked. They are dropped before the
+# search, so this stays a test of the tool rather than of the guest's hostname.
+check "report leaks neither a home path nor the host name" \
+  "$bin --report | grep -vE '^(distro|kernel): ' | grep -cE '/home/|$(uname -n)' || true" \
+  '^0$'
+
 # 12. And it must have changed nothing: not the installed set, not the
 #     repository configuration. This is the assertion that makes --check safe
 #     to run against a machine somebody depends on.
