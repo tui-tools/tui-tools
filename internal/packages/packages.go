@@ -69,6 +69,11 @@ type Fake struct {
 	// Launched records every binary a demo handover was asked for, so a test
 	// can assert that enter reached the right tool without starting one.
 	Launched []string
+	// Companions is the demo machine's companion catalogue, keyed by package
+	// name. It is separate from the kit fake's own maps because a companion
+	// name is not a tui-<word> name and the kit refuses one, which is the
+	// behaviour the real path has too.
+	Companions map[string]FakeCompanion
 }
 
 // NewFake returns the demo machine, stocked from the tools in the catalogue
@@ -87,25 +92,37 @@ func NewFake(names []string, installed, available map[string]string) *Fake {
 			machine.InstalledPkgs[name] = version
 		}
 	}
-	return &Fake{Fake: machine}
+	return &Fake{Fake: machine, Companions: map[string]FakeCompanion{}}
 }
 
 // Run answers the demo machine's commands.
 //
-// One of them is answered here rather than by the kit's fake: the step of the
-// repository setup that reads the downloaded key's fingerprint. The kit's fake
-// answers "ok" to everything, and the launcher — correctly — refuses to import
-// a key whose fingerprint it did not recognise, so a demo would stop there and
-// the one code path worth showing would never run. Instead the demo hands back
-// what gpg prints for the family's own key, so the comparison happens, passes,
-// and the sequence continues exactly as it does on a real machine.
+// Two kinds of them are answered here rather than by the kit's fake.
 //
-// This is the only place a demo answer is invented, and it is invented to make
-// a check run rather than to skip one.
+// The first is the step of the repository setup that reads the downloaded key's
+// fingerprint. The kit's fake answers "ok" to everything, and the launcher —
+// correctly — refuses to import a key whose fingerprint it did not recognise,
+// so a demo would stop there and the one code path worth showing would never
+// run. Instead the demo hands back what gpg prints for the family's own key, so
+// the comparison happens, passes, and the sequence continues exactly as it does
+// on a real machine.
+//
+// The second is every companion command, which the kit's fake refuses along
+// with the names in it. demo.go answers those in the manager's own output
+// format, so the demo reads them through the same parsers a machine does.
+//
+// These are the only places a demo answer is invented, and they are invented to
+// make a check run rather than to skip one.
 func (f *Fake) Run(ctx context.Context, cmd pkgmgr.Command) (string, error) {
 	if isKeyProbe(cmd) {
 		f.Ran = append(f.Ran, cmd)
 		return "fpr:::::::::" + Fingerprint + ":\n", nil
+	}
+	if out, mutation, ok := f.companionAnswer(cmd); ok {
+		if mutation {
+			f.Ran = append(f.Ran, cmd)
+		}
+		return out, nil
 	}
 	return f.Fake.Run(ctx, cmd)
 }

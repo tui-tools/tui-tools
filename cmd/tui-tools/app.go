@@ -32,6 +32,9 @@ const (
 	// modeOutput is the transcript of the sequence that just ran, which is
 	// what a failed install has to show rather than swallow.
 	modeOutput
+	// modeDetail is the full status of one entry. It is what enter opens on a
+	// companion, which has no terminal UI to hand the screen over to.
+	modeDetail
 )
 
 // The two budgets. Reading is a local database query and a small HTTP fetch;
@@ -55,8 +58,14 @@ type app struct {
 	// catalogNote is why the live catalog was not used, when it was not.
 	catalogNote string
 	rows        []catalog.Row
-	// visible holds the rows left after the filter, in display order.
+	// visible holds the rows left after the filter, in display order: the
+	// tools first, then the companions.
 	visible []catalog.Row
+	// lines is what the list actually draws — the visible rows with the group
+	// headings between them. The cursor indexes visible; the scroll offset
+	// indexes this, because a heading takes a line of the screen like anything
+	// else.
+	lines []line
 	// repo is what the repository probe found.
 	repo pkgmgr.RepoStatus
 
@@ -92,8 +101,13 @@ type loadedMsg struct {
 	note      string
 	installed map[string]string
 	available map[string]string
-	repo      pkgmgr.RepoStatus
-	err       error
+	// The same two answers for the companion packages, plus where the
+	// installed ones came from.
+	companionInstalled map[string]string
+	companionAvailable map[string]string
+	origins            map[string]catalog.Origin
+	repo               pkgmgr.RepoStatus
+	err                error
 }
 
 // ranMsg carries the result of a previewed sequence.
@@ -170,9 +184,37 @@ func (a *app) load(fetch bool) tea.Cmd {
 		// worth showing rather than a failure: the cards then say what is
 		// installed and stay quiet about what is current.
 		msg.available, _ = backend.Available(ctx, names)
+		msg.companionInstalled, msg.companionAvailable, msg.origins =
+			readCompanions(ctx, backend, doc)
 		msg.repo, _ = backend.RepoStatus()
 		return msg
 	}
+}
+
+// readCompanions asks the machine about the companion packages: what is here,
+// what the repositories offer, and — for the ones that are here — which
+// repository the copy on the disk came from.
+//
+// The origin is only asked about installed packages, because an origin is a
+// fact about a copy on the disk and there is no copy of something that is not
+// installed. All of it is read-only, and a manager that answers nothing leaves
+// the rows saying "cannot say" rather than emptying the screen.
+func readCompanions(ctx context.Context, backend packages.Backend,
+	doc catalog.Catalog) (installed, available map[string]string,
+	origins map[string]catalog.Origin) {
+	names := doc.CompanionNames()
+	if len(names) == 0 {
+		return nil, nil, nil
+	}
+	installed, available = packages.CompanionVersions(ctx, backend, names)
+
+	here := make([]string, 0, len(names))
+	for _, name := range names {
+		if installed[name] != "" {
+			here = append(here, name)
+		}
+	}
+	return installed, available, packages.CompanionOrigins(ctx, backend, here)
 }
 
 // runSequence executes a previewed sequence, step by step, stopping at the
@@ -280,7 +322,12 @@ func (a *app) handleLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 	a.loadFailed = false
 	a.catalog = msg.catalog
 	a.repo = msg.repo
-	a.rows = catalog.Rows(msg.catalog, msg.installed, msg.available)
+	// The companions come after the tools, and stay after them: the order the
+	// rows are built in is the order the group headings are drawn from.
+	a.rows = append(
+		catalog.Rows(msg.catalog, msg.installed, msg.available),
+		catalog.CompanionRows(msg.catalog, msg.companionInstalled,
+			msg.companionAvailable, msg.origins)...)
 	a.applyFilter()
 
 	switch {
@@ -329,7 +376,7 @@ func (a *app) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a.handleConfirm(msg)
 	case modeFilter:
 		return a.handleFilter(msg)
-	case modeHelp:
+	case modeHelp, modeDetail:
 		a.mode = modeList
 		return a, nil
 	case modeOutput:
@@ -429,10 +476,28 @@ func (a *app) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, a.confirmPackage(actionRemove)
 	case "s":
 		return a, a.confirmRepoSetup()
+	case "o":
+		return a, a.confirmSwitch()
 	case "enter":
-		return a.launch()
+		return a.open()
 	}
 	return a, nil
+}
+
+// open answers enter: a tool is launched, and a companion — which is not a
+// terminal UI and has nothing to hand the screen over to — opens its status
+// instead of doing nothing.
+func (a *app) open() (tea.Model, tea.Cmd) {
+	row, ok := a.selected()
+	if !ok {
+		a.setStatus(ui.StatusWarn, "nothing selected")
+		return a, nil
+	}
+	if row.IsCompanion() {
+		a.mode = modeDetail
+		return a, nil
+	}
+	return a.launch()
 }
 
 // action is one of the three things the package manager is asked to do.
@@ -459,18 +524,7 @@ func (a *app) confirmPackage(what action) tea.Cmd {
 		return nil
 	}
 
-	var (
-		steps []pkgmgr.Command
-		err   error
-	)
-	switch what {
-	case actionInstall:
-		steps, err = a.backend.Install([]string{row.Package})
-	case actionUpgrade:
-		steps, err = a.backend.Upgrade([]string{row.Package})
-	case actionRemove:
-		steps, err = a.backend.Remove([]string{row.Package})
-	}
+	steps, err := a.steps(what, row)
 	if err != nil {
 		a.setStatus(ui.StatusError, err.Error())
 		return nil
@@ -488,6 +542,35 @@ func (a *app) confirmPackage(what action) tea.Cmd {
 	return nil
 }
 
+// steps builds an action's command sequence for a row.
+//
+// A tool goes through tui-kit, which validates its name against ^tui-[a-z]+$
+// on the way. A companion cannot: its name is the upstream project's own, so
+// the same argv shapes are built by internal/packages, which holds it to the
+// companion pattern instead. Both end up as values the dialog previews and the
+// kit runner executes.
+func (a *app) steps(what action, row catalog.Row) ([]pkgmgr.Command, error) {
+	names := []string{row.Package}
+	if row.IsCompanion() {
+		switch what {
+		case actionInstall:
+			return packages.BuildCompanionInstall(a.backend.Manager(), names)
+		case actionUpgrade:
+			return packages.BuildCompanionUpgrade(a.backend.Manager(), names)
+		default:
+			return packages.BuildCompanionRemove(a.backend.Manager(), names)
+		}
+	}
+	switch what {
+	case actionInstall:
+		return a.backend.Install(names)
+	case actionUpgrade:
+		return a.backend.Upgrade(names)
+	default:
+		return a.backend.Remove(names)
+	}
+}
+
 // refuse says why an action makes no sense for a row, so the answer arrives
 // before a confirm dialog rather than as a package manager error after one.
 func refuse(what action, row catalog.Row) (string, bool) {
@@ -498,6 +581,10 @@ func refuse(what action, row catalog.Row) (string, bool) {
 		}
 		if !row.Supported {
 			return row.Package + " ships no build for this architecture", true
+		}
+		if row.IsCompanion() && row.Available == "" {
+			return "no repository configured on this machine carries " +
+				row.Package + "; press s to set the family repository up", true
 		}
 	case actionUpgrade:
 		if row.Installed == "" {
@@ -516,8 +603,12 @@ func refuse(what action, row catalog.Row) (string, bool) {
 func actionBody(what action, row catalog.Row) string {
 	switch what {
 	case actionInstall:
-		return row.Package + " will be installed from the tui-tools repository, " +
+		body := row.Package + " will be installed from the tui-tools repository, " +
 			"which your package manager verifies before anything is unpacked."
+		if row.Kind == catalog.KindMirror {
+			body += " It is " + packages.ProvenanceLine + "."
+		}
+		return body
 	case actionUpgrade:
 		return fmt.Sprintf(
 			"%s will be upgraded from %s to %s.", row.Package,
@@ -559,6 +650,73 @@ func (a *app) confirmRepoSetup() tea.Cmd {
 		},
 	}
 	return nil
+}
+
+// confirmSwitch opens the previewed sequence that replaces an installed
+// companion package with the family's own build of it.
+//
+// It is offered only when the machine's copy came from somewhere else and the
+// family repository carries it, because that is the only case where the
+// question — is this the build that went through the family's signing and
+// provenance gate — has a different answer afterwards.
+func (a *app) confirmSwitch() tea.Cmd {
+	row, ok := a.selected()
+	if !ok {
+		a.setStatus(ui.StatusWarn, "nothing selected")
+		return nil
+	}
+	if reason, refuse := refuseSwitch(row); refuse {
+		a.setStatus(ui.StatusWarn, reason)
+		return nil
+	}
+
+	steps, err := packages.BuildCompanionSwitch(a.backend.Manager(),
+		row.Package, row.Origin)
+	if err != nil {
+		a.setStatus(ui.StatusError, err.Error())
+		return nil
+	}
+
+	title := "Switch " + row.Package + " to the " + packages.RepoName + " build"
+	a.mode = modeConfirm
+	a.confirm = ui.Confirm{
+		Title: title,
+		Body: a.wrapBody(row.Package + " is installed from " +
+			originName(row.Origin) + ". The " + packages.RepoName +
+			" build is " + packages.ProvenanceLine + ", and this replaces the " +
+			"copy on this machine with it."),
+		Command: a.previewAll(steps),
+		Payload: pending{title: title, steps: steps},
+	}
+	return nil
+}
+
+// refuseSwitch says why a switch makes no sense for a row.
+func refuseSwitch(row catalog.Row) (string, bool) {
+	switch {
+	case !row.IsCompanion():
+		return "only a companion package can be switched: a tui-tools tool " +
+			"exists in no repository but the family's", true
+	case row.Installed == "":
+		return row.Package + " is not installed; press i to install it " +
+			"from the " + packages.RepoName + " repository", true
+	case !row.Origin.Offered:
+		return "the " + packages.RepoName + " repository does not carry " +
+			row.Package + " on this machine", true
+	case row.Origin.Family:
+		return row.Package + " already comes from the " + packages.RepoName +
+			" repository", true
+	}
+	return "", false
+}
+
+// originName renders an origin the way a sentence reads it, so an unknown one
+// is a phrase rather than an empty gap.
+func originName(origin catalog.Origin) string {
+	if origin.Repo == "" {
+		return "a repository this machine cannot name"
+	}
+	return "the " + origin.Repo + " repository"
 }
 
 // launch hands the terminal to the selected tool. Bubble Tea suspends the
@@ -608,10 +766,11 @@ func (a *app) previewAll(steps []pkgmgr.Command) string {
 	return strings.Join(previews, "\n$ ")
 }
 
-// applyFilter recomputes the visible rows.
+// applyFilter recomputes the visible rows and the lines that draw them.
 func (a *app) applyFilter() {
 	if a.filter == "" {
 		a.visible = a.rows
+		a.buildLines()
 		a.clampCursor()
 		return
 	}
@@ -623,15 +782,62 @@ func (a *app) applyFilter() {
 		}
 	}
 	a.visible = kept
+	a.buildLines()
 	a.clampCursor()
 }
 
-// haystack is what the filter searches: everything on the card.
+// haystack is what the filter searches: everything on the card, which for a
+// companion includes its kind and the project it mirrors.
 func haystack(row catalog.Row) string {
 	return strings.Join([]string{
 		row.Name, row.Tagline, row.Category, string(row.State),
+		string(row.Kind), row.Upstream, row.Origin.Repo,
 		strings.Join(row.Backends, " "),
 	}, " ")
+}
+
+// line is one drawn line of the list: a group heading, or one of the visible
+// rows. The cursor only ever lands on a row; a heading is scenery.
+type line struct {
+	// heading is the group's name, and empty on a row.
+	heading string
+	// row is the index into visible, and -1 on a heading.
+	row int
+}
+
+// The heading that separates the two groups, and the line that says what the
+// second one is. The tools need no heading: the table's own header already says
+// what the first group is, and a screen that labels the obvious is a screen with
+// one less row of tools on it.
+const (
+	companionsHeading = "COMPANIONS"
+	companionsNote    = "family packages that are not terminal UIs"
+)
+
+// buildLines lays the visible rows out with a heading in front of the first
+// companion, which is what makes the second group a group rather than more of
+// the first.
+func (a *app) buildLines() {
+	lines := make([]line, 0, len(a.visible)+1)
+	headed := false
+	for i, row := range a.visible {
+		if row.IsCompanion() && !headed {
+			headed = true
+			lines = append(lines, line{heading: companionsHeading, row: -1})
+		}
+		lines = append(lines, line{row: i})
+	}
+	a.lines = lines
+}
+
+// lineOf returns the line a visible row is drawn on.
+func (a *app) lineOf(row int) int {
+	for i, l := range a.lines {
+		if l.row == row {
+			return i
+		}
+	}
+	return 0
 }
 
 // selected returns the highlighted row.
@@ -649,6 +855,11 @@ func (a *app) moveCursor(delta int) {
 }
 
 // clampCursor keeps the cursor and the scroll offset within range.
+//
+// The cursor counts rows and the offset counts lines, because a group heading
+// occupies a line of the screen without ever being selected. The heading above
+// the selection is pulled into view with it, so scrolling into the companions
+// never shows a group without its name.
 func (a *app) clampCursor() {
 	if len(a.visible) == 0 {
 		a.cursor, a.offset = 0, 0
@@ -657,11 +868,15 @@ func (a *app) clampCursor() {
 	a.cursor = min(max(a.cursor, 0), len(a.visible)-1)
 
 	height := a.listHeight()
-	if a.cursor < a.offset {
-		a.offset = a.cursor
+	at := a.lineOf(a.cursor)
+	if at < a.offset {
+		a.offset = at
+		if at > 0 && a.lines[at-1].heading != "" {
+			a.offset = at - 1
+		}
 	}
-	if a.cursor >= a.offset+height {
-		a.offset = a.cursor - height + 1
+	if at >= a.offset+height {
+		a.offset = at - height + 1
 	}
-	a.offset = max(min(a.offset, max(len(a.visible)-height, 0)), 0)
+	a.offset = max(min(a.offset, max(len(a.lines)-height, 0)), 0)
 }

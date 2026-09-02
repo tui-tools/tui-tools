@@ -10,6 +10,9 @@ family is a card: what it does, whether this machine has it, which version, and
 whether the repository is offering a newer one. Install, update and remove go
 through the distribution's own package manager — `apt`, `dnf` or `pacman` — and
 `enter` hands the terminal to an installed tool and takes it back when it exits.
+Under the tools is a second group, the companions: family packages that are not
+terminal UIs, including upstream projects rebuilt from source under the family's
+provenance gate, with the repository each installed copy came from on the row.
 
 ![The dashboard](docs/screenshots/tui-tools-main.png)
 
@@ -30,10 +33,15 @@ what each one is called to a package manager, and which version the family
 published. That document arrives over the network and is treated as a claim,
 never as an authority:
 
-- every name in it is held to `^tui-[a-z]+$` before it is kept, and held to it
-  again by [`tui-kit/pkgmgr`](https://github.com/tui-tools/tui-kit) before it
-  can reach an argv. Nothing else from the catalog ever reaches a command line
-  — not a URL, not a version, not a description;
+- every tool name in it is held to `^tui-[a-z]+$` before it is kept, and held to
+  it again by [`tui-kit/pkgmgr`](https://github.com/tui-tools/tui-kit) before it
+  can reach an argv. A companion is not called `tui-<word>` — a mirror carries
+  the upstream project's own name — so its package names are held twice to
+  `^[a-z][a-z0-9]*(-[a-z0-9]+)*$` instead, once in the catalog reader and once
+  where the command is built. Nothing else from the catalog ever reaches a
+  command line — not a URL, not a description. The one version that does, the
+  one apt is told to install on a switch, is read off the package manager's own
+  output and checked before it goes there;
 - what actually reaches the machine is decided by `apt`, `dnf` or `pacman`
   verifying the signed repository index and the signed package. This tool does
   not repeat that check and cannot weaken it. Reading the catalog is choosing
@@ -159,7 +167,7 @@ Upgrades then arrive with the rest of your system updates.
 ### Any distribution, static binary
 
 ```sh
-curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.1.0/tui-tools_0.1.0_linux_amd64.tar.gz | tar -xz tui-tools
+curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.1.3/tui-tools_0.1.3_linux_amd64.tar.gz | tar -xz tui-tools
 sudo install -m0755 tui-tools /usr/local/bin/tui-tools
 ```
 
@@ -212,10 +220,11 @@ sha256sum -c checksums.txt --ignore-missing
 | --- | --- |
 | `↑`/`k`, `↓`/`j` | Move the selection |
 | `g` / `G` | First / last tool |
-| `enter` | Launch the selected tool; the dashboard returns when it exits |
+| `enter` | Launch the selected tool; the dashboard returns when it exits. On a companion, which is not a terminal UI, show its full status instead |
 | `i` | Install it, through this machine's package manager |
 | `u` | Update it |
 | `x` / `d` | Remove it; nothing it pulled in is autoremoved |
+| `o` | Switch a companion to the tui-tools build of it, when the copy here came from another repository |
 | `s` | Set the tui-tools repository up, with the key pinned by fingerprint |
 | `r` | Re-read the catalog and the machine |
 | `/` | Filter by name, tagline, category or state |
@@ -245,6 +254,48 @@ repository is configured, and whether the catalog on screen is the live one or
 the snapshot in the binary, with the time it was generated.
 
 ![The help screen](docs/screenshots/tui-tools-help.png)
+
+## Companions
+
+Under the tools sits a second group, with the same columns and the same keys:
+the companions, which are family packages that are not terminal UIs. The
+`CATEGORY` cell carries the kind.
+
+- a `component` is one of the family's own packages, named `tui-tools-*`;
+- a `mirror` is an upstream project rebuilt from its own source tag under the
+  family signing and provenance gate. `headscale` is one.
+
+They install, update and remove exactly like a tool, through the same preview
+and the same confirmation. `enter` does not launch one, because there is nothing
+to launch: it opens the full status instead, which is where the versions, the
+upstream tag and the provenance line are.
+
+### Where the installed package came from
+
+A mirror carries the upstream project's own name, so the same name can also come
+from the distribution's repositories, and then the copy on this machine is not
+the one that went through the family's gate. The launcher asks the package
+manager, with read-only queries, and the row says the answer:
+
+| Manager | What is asked | What it answers |
+| --- | --- | --- |
+| `pacman` | `pacman -Sl tui-tools`, `pacman -Qi`, `pacman -Si` | pacman records no repository for an installed package, so the answer is inferred: a bare `[installed]` beside the family's line means the machine has exactly the version that repository offers, and `pacman -Si` names the repository whose version matches the installed one |
+| `apt` | `apt-cache policy` | the version marked `***` is the installed one; the first source under it that is not `/var/lib/dpkg/status` is where it came from |
+| `dnf` | `dnf repoquery --installed --qf '%{name}\|%{from_repo}'` | dnf records it, so it is read rather than inferred. `@System` means the package was installed from a file |
+
+When the package did not come from `tui-tools`, the row reads `from: extra` (or
+whatever the repository is called) and `o` offers the switch. Like everything
+else that changes the machine, it is one previewed command:
+
+```console
+$ pacman -S --noconfirm tui-tools/headscale         # pacman
+$ apt-get install -y --allow-downgrades headscale=0.26.1   # apt, the family version named
+$ dnf install --repo tui-tools -y headscale         # dnf
+```
+
+apt is the odd one because it cannot be told to install from a named repository:
+the family's build is named by its version instead, and reached through the
+priority the repository setup already wrote.
 
 ## Usage
 
@@ -286,6 +337,25 @@ $ tui-tools --check | jq '{manager, repo: .repo.configured, catalog: .catalog.so
 The exit code says whether the tool worked, not whether the machine is up to
 date: a machine with nothing installed is a successful run, and the news is in
 `summary`.
+
+`companions` is the same read for the family packages that are not terminal
+UIs, and it carries the origin, so a script can answer the provenance question
+without opening a UI. The field is absent when the catalog carries no companion.
+
+```console
+$ tui-tools --check | jq '.companions[] | select(.switchable) | {name, installed, origin}'
+{
+  "name": "headscale",
+  "installed": "0.25.1-1",
+  "origin": {
+    "repo": "extra",
+    "family": false,
+    "offered": true,
+    "version": "0.26.1-1",
+    "detail": "extra offers headscale 0.25.1-1, which is the installed version, so it is where the copy here came from"
+  }
+}
+```
 
 ### `--report`, for bug reports
 
@@ -334,7 +404,7 @@ The bug form asks for this block first — see
 
 ## What it can do to your machine
 
-Four things, each of them previewed as the exact command sequence and confirmed
+Five things, each of them previewed as the exact command sequence and confirmed
 first:
 
 - **install** a tool — a metadata refresh, then the manager's install;
@@ -345,6 +415,10 @@ first:
 - **remove** one. Nothing else goes with it: the dependencies it pulled in are
   left alone, because an autoremove decided by a launcher is how an unrelated
   package disappears;
+- **switch a companion** to the tui-tools build of it, when the copy installed
+  here came from another repository. One command, and the dialog says what it is
+  for: the family's build is rebuilt from source under the family signing and
+  provenance gate, and the copy that is here is not;
 - **set the repository up**, with the signing key pinned by fingerprint.
 
 Reading takes no privileges at all. Which tools are installed and which the
@@ -431,6 +505,7 @@ hidden; one below the minimum is marked as such and the tool still runs.
 | --- | --- |
 | `>=6.0` | Arch has no supported way to upgrade one package against a refreshed database without upgrading the machine with it, so an update here is `pacman -Syu` with the tool named, and the confirm dialog says so before it runs |
 | `>=6.0` | the repository setup writes a `[tui-tools]` section under /etc/pacman.d and adds one Include line to pacman.conf, so a later setup finds it again instead of appending a second block |
+| `>=6.0` | pacman records no repository for an installed package, so a companion's origin is inferred rather than read: a bare `[installed]` in `pacman -Sl tui-tools` means the machine has the version that repository offers, and `pacman -Si` names the repository whose version matches the installed one |
 
 ### apt
 
@@ -444,6 +519,7 @@ hidden; one below the minimum is marked as such and the tool still runs.
 | Versions | What changes |
 | --- | --- |
 | `>=2.0` | the available version comes from `apt-cache policy`, which reads the lists already on disk; a repository added a moment ago reports nothing until the refresh, which is the first previewed step of an install rather than something the read path does behind you |
+| `>=2.0` | a companion's origin is read off `apt-cache policy`: the version marked `***` is the installed one, and the first source under it that is not /var/lib/dpkg/status is where it came from. apt cannot install from a named repository, so a switch names the family's version instead |
 
 ### dnf
 
@@ -459,6 +535,7 @@ hidden; one below the minimum is marked as such and the tool still runs.
 | --- | --- |
 | `>=5.0` | `dnf --version` prints `dnf5 version 5.2.18.0`, where dnf4 prints a bare `4.24.0` on its first line; both are read by the same pattern, which keeps three components because a four-part version is not one the family schema records |
 | `>=4.0` | the available version comes from `dnf repoquery`, which answers from the cache on disk, so a machine whose metadata has expired reports what it last fetched rather than refreshing behind you |
+| `>=4.0` | dnf is the one manager that records where an installed package came from, so a companion's origin is read rather than inferred: `dnf repoquery --installed --qf '%{name}|%{from_repo}'` answers it on dnf4 and dnf5, and `@System` means it came from a file |
 
 The tested versions are generated from `compat/results.jsonl`, which the tool's
 own smoke test appends to when it runs against a real machine in

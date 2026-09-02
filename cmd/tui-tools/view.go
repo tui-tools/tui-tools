@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tui-tools/tui-kit/ui"
 	"github.com/tui-tools/tui-tools/internal/catalog"
+	"github.com/tui-tools/tui-tools/internal/packages"
 )
 
 // Layout constants: the rows the card list cannot use.
@@ -47,9 +48,75 @@ func (a *app) View() string {
 			ui.HelpScreen(a.theme, "tui-tools — keys", helpKeys(), a.width))
 	case modeOutput:
 		return a.outputView()
+	case modeDetail:
+		return a.detailView()
 	default:
 		return a.listView()
 	}
+}
+
+// detailView is the whole status of one entry, which is what enter opens on a
+// companion. It answers the question the dashboard only has a cell for: what
+// this is, where the copy on this machine came from, and what the family
+// repository offers instead.
+func (a *app) detailView() string {
+	t := a.theme
+	row, ok := a.selected()
+	if !ok {
+		return a.listView()
+	}
+	width := max(a.width, 20)
+
+	facts := []ui.Fact{
+		{Label: "kind", Value: string(row.Kind)},
+		{Label: "state", Value: string(row.State)},
+	}
+	if row.IsCompanion() {
+		facts = append(facts, ui.Fact{
+			Label: "from", Value: originRepo(row.Origin)})
+	}
+	header := ui.Header{
+		Title: row.Name, Subtitle: row.Tagline, Facts: facts,
+	}.Render(t, a.width)
+
+	body := []string{""}
+	for _, text := range wrap(provenanceLine(row), width-2, 4) {
+		body = append(body, ui.Truncate(t.Base.Render("  "+text), width))
+	}
+	body = append(body, "")
+	for _, fact := range [][2]string{
+		{"installed", blank(row.Installed)},
+		{"in the repositories", blank(row.Available)},
+		{"the family repository offers", blank(row.Origin.Version)},
+		{"packages", strings.Join(row.Packages, ", ")},
+		{"upstream", upstreamOf(row)},
+		{"repo", row.Repo},
+		{"page", row.Page},
+	} {
+		if fact[1] == "" {
+			continue
+		}
+		body = append(body, ui.Truncate(
+			t.Muted.Render("  "+ui.Pad(fact[0], 30)+" ")+t.Base.Render(fact[1]),
+			width))
+	}
+	body = append(body, "", ui.Truncate(
+		t.Muted.Render("  verify ")+t.Command.Render(verifyHint(row)), width))
+
+	height := max(a.height-headerLines-footerLines-1, minListHeight)
+	for len(body) < height {
+		body = append(body, "")
+	}
+
+	help := ui.HelpBar(t, []ui.KeyHint{
+		{Key: "i / u / x", Desc: "install, update, remove"},
+		{Key: "o", Desc: "switch to the family build"},
+		{Key: "esc", Desc: "back to the dashboard"},
+	}, a.width)
+	status := ui.StatusLine(t, a.statusKind, a.status,
+		"any key returns to the dashboard", a.width)
+	return strings.Join([]string{
+		header, strings.Join(body[:height], "\n"), help, status}, "\n")
 }
 
 // listView renders the dashboard: header, cards, detail pane, help bar,
@@ -139,12 +206,11 @@ func (a *app) catalogFact() string {
 
 // defaultStatus is the hint shown when there is no message to report.
 func (a *app) defaultStatus() string {
-	count := strconv.Itoa(len(a.visible))
+	count := strconv.Itoa(len(a.visible)) + " entries"
 	if len(a.visible) != len(a.rows) {
-		return count + " of " + strconv.Itoa(len(a.rows)) +
-			" tools  ·  enter to launch  ·  ? for help"
+		count += " of " + strconv.Itoa(len(a.rows))
 	}
-	return count + " tools  ·  enter to launch  ·  ? for help"
+	return count + "  ·  enter to launch or show the details  ·  ? for help"
 }
 
 // cards renders the tool list, dropping columns on narrow terminals.
@@ -163,12 +229,31 @@ func (a *app) cards() string {
 		columns = append(columns, ui.Column{Title: "CATEGORY", Width: 14})
 	}
 
-	rows := make([][]string, 0, len(a.visible))
-	styles := make([]*lipgloss.Style, 0, len(a.visible))
-	for _, row := range a.visible {
+	rows := make([][]string, 0, len(a.lines))
+	styles := make([]*lipgloss.Style, 0, len(a.lines))
+	selected := -1
+	for i, l := range a.lines {
+		if l.heading != "" {
+			heading := a.theme.Subtitle
+			// The heading is a table row like any other, so what it says is
+			// laid out in the columns that are on screen: the group's name
+			// where a tool's name goes, and what the group is where the
+			// taglines are.
+			cells := []string{l.heading, "", ""}
+			if showTagline {
+				cells = append(cells, companionsNote)
+			}
+			rows = append(rows, cells)
+			styles = append(styles, &heading)
+			continue
+		}
+		if l.row == a.cursor {
+			selected = i
+		}
+		row := a.visible[l.row]
 		cells := []string{
 			glyph(row) + " " + row.Name,
-			string(row.State),
+			stateCell(row),
 			versionCell(row),
 		}
 		if showTagline {
@@ -183,8 +268,30 @@ func (a *app) cards() string {
 
 	return ui.Table{
 		Columns: columns, Rows: rows, Styles: styles,
-		Selected: a.cursor, Offset: a.offset, Height: a.listHeight(),
+		Selected: selected, Offset: a.offset, Height: a.listHeight(),
 	}.Render(a.theme, a.width)
+}
+
+// stateCell is what the STATE column says.
+//
+// For a mirror installed from somewhere other than the family repository it
+// says so instead of saying how current it is, because that is the more
+// important fact: the copy on the machine did not come through the family's
+// signing and provenance gate, whatever its version number is.
+func stateCell(row catalog.Row) string {
+	if row.Switchable() {
+		return "from: " + originRepo(row.Origin)
+	}
+	return string(row.State)
+}
+
+// originRepo names the repository a row's package came from, in the few
+// characters a table cell has.
+func originRepo(origin catalog.Origin) string {
+	if origin.Repo == "" {
+		return "elsewhere"
+	}
+	return origin.Repo
 }
 
 // glyph is the one character that says what the machine has. The catalog's
@@ -205,6 +312,13 @@ func glyph(row catalog.Row) string {
 
 // versionCell renders the versions the way the state reads them.
 func versionCell(row catalog.Row) string {
+	// A row offering a switch reads against the family repository rather than
+	// against whichever repository the machine happens to prefer: what the
+	// switch would install is the number the user is deciding about.
+	if row.Switchable() && row.Origin.Version != "" &&
+		row.Origin.Version != row.Installed {
+		return row.Installed + " → " + row.Origin.Version
+	}
 	switch row.State {
 	case catalog.StateOutdated:
 		return row.Installed + " → " + row.Available
@@ -224,6 +338,10 @@ func (a *app) rowStyle(row catalog.Row) *lipgloss.Style {
 	switch {
 	case !row.Supported:
 		style = a.theme.Row.Foreground(a.theme.Danger.GetForeground())
+	// A package that is here but is not the family's build is the row worth
+	// finding without reading, so it is painted like an update that is waiting.
+	case row.Switchable():
+		style = a.theme.Row.Foreground(a.theme.Warn.GetForeground())
 	case row.State == catalog.StateOutdated:
 		style = a.theme.Row.Foreground(a.theme.Warn.GetForeground())
 	case row.State == catalog.StateNotInstalled:
@@ -253,7 +371,13 @@ func (a *app) detail() string {
 	lines = append(lines, ui.Truncate(title, width))
 	lines = append(lines, ui.Truncate(t.Subtitle.Render(row.Tagline), width))
 
-	summary := wrap(firstParagraph(row.Description), width, 2)
+	body := firstParagraph(row.Description)
+	if row.IsCompanion() {
+		// A companion has no description in the catalog, and the question its
+		// card exists to answer is where the copy on this machine came from.
+		body = provenanceLine(row)
+	}
+	summary := wrap(body, width, 2)
 	for len(summary) < 2 {
 		summary = append(summary, "")
 	}
@@ -261,14 +385,24 @@ func (a *app) detail() string {
 		lines = append(lines, ui.Truncate(t.Base.Render(line), width))
 	}
 
-	backends := "none — it shells out to nothing"
-	if len(row.Backends) > 0 {
-		backends = strings.Join(row.Backends, ", ")
+	if row.IsCompanion() {
+		lines = append(lines, ui.Truncate(
+			t.Muted.Render("kind ")+t.Base.Render(string(row.Kind))+
+				t.Muted.Render("   ")+t.Base.Render(upstreamOf(row))+
+				t.Muted.Render("   packages ")+
+				t.Base.Render(strings.Join(row.Packages, ", ")),
+			width))
+	} else {
+		backends := "none — it shells out to nothing"
+		if len(row.Backends) > 0 {
+			backends = strings.Join(row.Backends, ", ")
+		}
+		lines = append(lines, ui.Truncate(
+			t.Muted.Render("drives ")+t.Base.Render(backends)+
+				t.Muted.Render("   platforms ")+
+				t.Base.Render(strings.Join(row.Platforms, ", ")),
+			width))
 	}
-	lines = append(lines, ui.Truncate(
-		t.Muted.Render("drives ")+t.Base.Render(backends)+
-			t.Muted.Render("   platforms ")+t.Base.Render(strings.Join(row.Platforms, ", ")),
-		width))
 	lines = append(lines, ui.Truncate(
 		t.Muted.Render("repo ")+t.Base.Render(row.Repo)+
 			t.Muted.Render("   page ")+t.Base.Render(row.Page)+
@@ -278,6 +412,38 @@ func (a *app) detail() string {
 		t.Muted.Render("verify ")+t.Command.Render(verifyHint(row)), width))
 
 	return strings.Join(lines[:detailLines], "\n")
+}
+
+// provenanceLine is what the detail pane says about a companion: where the copy
+// on this machine came from, and what the family's own build is.
+func provenanceLine(row catalog.Row) string {
+	what := "This is a family package that is not a terminal UI, so there is " +
+		"nothing to launch."
+	if row.Kind == catalog.KindMirror {
+		what = "The tui-tools build of " + row.Name + " is " +
+			packages.ProvenanceLine + "."
+	}
+	switch {
+	case row.Origin.Detail != "":
+		return what + " " + row.Origin.Detail + "."
+	case row.Installed == "":
+		return what + " It is not installed here."
+	default:
+		return what + " Where the copy on this machine came from could not be read."
+	}
+}
+
+// upstreamOf names the project a mirror was rebuilt from, and says so plainly
+// when there is none because the entry is a component.
+func upstreamOf(row catalog.Row) string {
+	if row.Upstream == "" {
+		return "built by the family"
+	}
+	tag := row.UpstreamVersion
+	if tag == "" {
+		tag = "an untagged source"
+	}
+	return "rebuilt from " + row.Upstream + " " + tag
 }
 
 // blankLink renders a missing link as a word rather than as nothing.
@@ -296,7 +462,14 @@ func verifyHint(row catalog.Row) string {
 	if slug == "" || slug == row.Repo {
 		slug = "tui-tools/" + row.Name
 	}
-	return "gh attestation verify " + row.Name + "_" + blank(row.Available) +
+	// The file to check is the family's own release, so a companion the machine
+	// has from elsewhere is named at the version the family publishes rather
+	// than at the one that happens to be installed.
+	version := row.Available
+	if row.IsCompanion() && row.Origin.Version != "" {
+		version = row.Origin.Version
+	}
+	return "gh attestation verify " + row.Name + "_" + blank(version) +
 		"_linux_amd64.tar.gz -R " + slug
 }
 
@@ -379,6 +552,7 @@ func shortHelpKeys() []ui.KeyHint {
 		{Key: "i", Desc: "install"},
 		{Key: "u", Desc: "update"},
 		{Key: "x", Desc: "remove"},
+		{Key: "o", Desc: "origin"},
 		{Key: "s", Desc: "repository"},
 		{Key: "r", Desc: "refresh"},
 		{Key: "/", Desc: "filter"},
@@ -395,10 +569,13 @@ func helpKeys() []ui.KeyHint {
 		{Key: "pgup/pgdn", Desc: "scroll a page"},
 		{Key: "/", Desc: "filter by name, tagline, category or state"},
 		{Key: "", Desc: ""},
-		{Key: "enter", Desc: "launch the selected tool, and come back when it exits"},
+		{Key: "enter", Desc: "launch the selected tool, and come back when it exits; " +
+			"on a companion, which is not a terminal UI, show its full status instead"},
 		{Key: "i", Desc: "install it, through this machine's package manager"},
 		{Key: "u", Desc: "update it"},
 		{Key: "x / d", Desc: "remove it; nothing it pulled in is autoremoved"},
+		{Key: "o", Desc: "switch a companion to the tui-tools build of it, when the " +
+			"copy here came from another repository"},
 		{Key: "s", Desc: "set the tui-tools repository up, with the key pinned by fingerprint"},
 		{Key: "r", Desc: "re-read the catalog and the machine"},
 		{Key: "", Desc: ""},
@@ -409,5 +586,8 @@ func helpKeys() []ui.KeyHint {
 			"previewed as the exact command line and confirmed first"},
 		{Key: "note", Desc: "the catalog only says which tools exist; your package " +
 			"manager verifies the signed repository and the signed package"},
+		{Key: "note", Desc: "a mirror is an upstream project rebuilt from its own " +
+			"source tag under the family signing and provenance gate; the row says " +
+			"which repository the copy on this machine came from"},
 	}
 }

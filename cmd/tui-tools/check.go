@@ -43,6 +43,10 @@ type checkReport struct {
 	Summary summaryReport `json:"summary"`
 	// Tools is one entry per tool of the family, in catalog order.
 	Tools []toolReport `json:"tools"`
+	// Companions is one entry per family package that is not a terminal UI,
+	// each carrying where the installed copy came from. It is absent from a
+	// report read against a catalog that carries none.
+	Companions []companionReport `json:"companions,omitempty"`
 	// Compat is what the package-manager version probes found, one entry per
 	// backend the manifest declares. It is reported rather than asserted: an
 	// untested version is a fact about the machine, not a failure of the read
@@ -105,6 +109,38 @@ type toolReport struct {
 	Repo      string   `json:"repo"`
 	Page      string   `json:"page"`
 	Changelog string   `json:"changelog,omitempty"`
+}
+
+// companionReport is one companion: what the catalog says, what this machine
+// says, and where the installed copy came from.
+//
+// The origin is the field a script is here for: it is what says whether the
+// package on this machine went through the family's signing and provenance
+// gate, or came from somewhere else that happens to use the same name.
+type companionReport struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Package string `json:"package"`
+	Summary string `json:"summary"`
+	// Upstream and UpstreamVersion are the mirrored project and the source tag
+	// it was rebuilt from, absent for a component.
+	Upstream        string   `json:"upstream,omitempty"`
+	UpstreamVersion string   `json:"upstreamVersion,omitempty"`
+	Packages        []string `json:"packages,omitempty"`
+	Installed       string   `json:"installed,omitempty"`
+	Available       string   `json:"available,omitempty"`
+	// Current is the version the catalog says is the latest release.
+	Current string `json:"current,omitempty"`
+	State   string `json:"state"`
+	Compat  string `json:"compat"`
+	// Origin is where the installed copy came from and what the family
+	// repository offers.
+	Origin catalog.Origin `json:"origin"`
+	// Switchable reports that the family repository offers a build of this
+	// package and the copy installed here is not it.
+	Switchable bool   `json:"switchable"`
+	Repo       string `json:"repo,omitempty"`
+	Page       string `json:"page,omitempty"`
 }
 
 // runCheck reads the catalog and the machine and prints the result as JSON.
@@ -192,6 +228,30 @@ func runCheck(ctx context.Context, backend packages.Backend, source catalogSourc
 			Repo:      row.Repo,
 			Page:      row.Page,
 			Changelog: row.Changelog,
+		})
+	}
+
+	companionInstalled, companionAvailable, origins :=
+		readCompanions(ctx, backend, doc)
+	for _, row := range catalog.CompanionRows(doc, companionInstalled,
+		companionAvailable, origins) {
+		report.Companions = append(report.Companions, companionReport{
+			Name:            row.Name,
+			Kind:            string(row.Kind),
+			Package:         row.Package,
+			Summary:         row.Tagline,
+			Upstream:        row.Upstream,
+			UpstreamVersion: row.UpstreamVersion,
+			Packages:        row.Packages,
+			Installed:       row.Installed,
+			Available:       row.Available,
+			Current:         row.Version,
+			State:           string(row.State),
+			Compat:          row.Compat,
+			Origin:          row.Origin,
+			Switchable:      row.Switchable(),
+			Repo:            row.Repo,
+			Page:            row.Page,
 		})
 	}
 

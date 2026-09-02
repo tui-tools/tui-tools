@@ -1131,5 +1131,21 @@
       "page": "https://tui.tools/tools/tui-users/",
       "changelog": "https://github.com/tui-tools/tui-users/releases/tag/v0.1.2"
     }
+  ],
+  "companions": [
+    {
+      "name": "headscale",
+      "kind": "mirror",
+      "summary": "Self-hosted Tailscale control server, rebuilt from the upstream source tag",
+      "upstream": "https://github.com/juanfont/headscale",
+      "upstreamVersion": "v0.26.1",
+      "version": "0.26.1",
+      "released": "2026-09-01",
+      "packages": [
+        "headscale"
+      ],
+      "repo": "https://github.com/tui-tools/headscale",
+      "page": "https://tui.tools/#companions"
+    }
   ]
 }

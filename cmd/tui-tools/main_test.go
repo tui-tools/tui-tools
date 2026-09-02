@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -89,6 +92,117 @@ func TestDemoMachineShowsEveryState(t *testing.T) {
 		if states[want] == 0 {
 			t.Errorf("no tool in the demo is %q", want)
 		}
+	}
+}
+
+// The demo has to carry one of each companion situation, because they are the
+// two the screen behaves differently for: a mirror installed from somewhere
+// else, which is what the origin check and the switch exist for, and a
+// component that is not installed at all.
+func TestDemoMachineShowsBothCompanions(t *testing.T) {
+	source := catalogSource{url: catalog.URL, offline: true, demo: true}
+	backend := demoBackend(source)
+	doc, _ := source.Load(context.Background())
+
+	installed, available, origins := readCompanions(context.Background(),
+		backend, doc)
+	rows := catalog.CompanionRows(doc, installed, available, origins)
+	if len(rows) < 2 {
+		t.Fatalf("the demo shows %d companions", len(rows))
+	}
+
+	kinds := map[catalog.Kind]bool{}
+	switchable := 0
+	for _, row := range rows {
+		kinds[row.Kind] = true
+		if row.Switchable() {
+			switchable++
+			if row.Origin.Repo != "extra" {
+				t.Errorf("%s came from %q, want extra so the switch is worth "+
+					"showing", row.Name, row.Origin.Repo)
+			}
+		}
+	}
+	if !kinds[catalog.KindMirror] || !kinds[catalog.KindComponent] {
+		t.Errorf("the demo shows the kinds %v", kinds)
+	}
+	if switchable == 0 {
+		t.Error("nothing in the demo can be switched to the family build")
+	}
+}
+
+// --check is the non-interactive read path, and a script reading it has to be
+// able to answer the provenance question without opening a UI.
+func TestCheckReportsTheCompanions(t *testing.T) {
+	source := catalogSource{url: catalog.URL, offline: true, demo: true}
+	var out strings.Builder
+	if err := runCheck(context.Background(), demoBackend(source), source, nil,
+		&out); err != nil {
+		t.Fatalf("runCheck: %v", err)
+	}
+
+	var report struct {
+		Companions []companionReport `json:"companions"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &report); err != nil {
+		t.Fatalf("the report is not JSON: %v", err)
+	}
+	if len(report.Companions) < 2 {
+		t.Fatalf("the report carries %d companions", len(report.Companions))
+	}
+	found := false
+	for _, companion := range report.Companions {
+		if !companion.Switchable {
+			continue
+		}
+		found = true
+		if companion.Origin.Repo == "" || companion.Origin.Family {
+			t.Errorf("%s: origin = %+v", companion.Name, companion.Origin)
+		}
+		if !companion.Origin.Offered || companion.Origin.Version == "" {
+			t.Errorf("%s: the family repository offers %+v",
+				companion.Name, companion.Origin)
+		}
+		if companion.Kind != string(catalog.KindMirror) ||
+			companion.Upstream == "" {
+			t.Errorf("%s: kind %q, upstream %q",
+				companion.Name, companion.Kind, companion.Upstream)
+		}
+	}
+	if !found {
+		t.Error("no companion in the report says it came from another repository")
+	}
+}
+
+// A machine whose catalog carries no companion prints none, rather than an
+// empty array a script has to special-case.
+func TestCheckOmitsTheCompanionsWhenThereAreNone(t *testing.T) {
+	// A document from before the companions array existed, which is what an
+	// older site still serves.
+	const older = `{"schema": 1, "packages": {"repo": "https://pkgs.tui.tools"},
+	  "tools": [{"name": "tui-secure", "package": "tui-secure",
+	    "binary": "tui-secure", "tagline": "posture", "version": "0.1.2",
+	    "platforms": ["linux/amd64", "linux/arm64"]}]}`
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(older))
+		}))
+	defer server.Close()
+
+	source := catalogSource{url: server.URL}
+	doc, note := source.Load(context.Background())
+	if note != "" || len(doc.Companions) != 0 {
+		t.Fatalf("the served document did not arrive as expected: %q, %+v",
+			note, doc.Companions)
+	}
+
+	var out strings.Builder
+	if err := runCheck(context.Background(), demoBackend(source), source, nil,
+		&out); err != nil {
+		t.Fatalf("runCheck: %v", err)
+	}
+	if strings.Contains(out.String(), `"companions"`) {
+		t.Error("a catalog with no companions still printed the field")
 	}
 }
 

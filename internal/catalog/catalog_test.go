@@ -31,6 +31,162 @@ const sample = `{
   ]
 }`
 
+// companions is the same document with the companions array the site grew
+// after this launcher shipped: a mirror, a component, and one of every entry
+// the parser has to drop.
+const companions = `{
+  "schema": 1,
+  "packages": {"repo": "https://pkgs.tui.tools", "live": true},
+  "tools": [
+    {"name": "tui-secure", "package": "tui-secure", "binary": "tui-secure",
+     "version": "0.1.2", "platforms": ["linux/amd64", "linux/arm64"]}
+  ],
+  "companions": [
+    {"name": "headscale", "kind": "mirror",
+     "summary": "Self-hosted Tailscale control server, rebuilt from the upstream source tag",
+     "upstream": "https://github.com/juanfont/headscale",
+     "upstreamVersion": "v0.26.1", "version": "0.26.1",
+     "packages": ["headscale"]},
+    {"name": "tui-tools-agent", "kind": "component", "version": "0.1.0"},
+    {"name": "mystery", "kind": "plugin"},
+    {"name": "Headscale", "kind": "mirror"},
+    {"name": "evil", "kind": "mirror", "packages": ["evil; rm -rf /"]},
+    {"name": "half-evil", "kind": "mirror", "packages": ["half-evil", "$(id)"]}
+  ]
+}`
+
+func TestParseKeepsOnlyTheCompanionsItMayActOn(t *testing.T) {
+	doc, err := Parse([]byte(companions))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	var names []string
+	for _, companion := range doc.Companions {
+		names = append(names, companion.Name)
+	}
+	if got, want := strings.Join(names, " "),
+		"half-evil headscale tui-tools-agent"; got != want {
+		t.Errorf("companions = %q, want %q", got, want)
+	}
+	// The entry that named no package is read as naming itself, and the one
+	// whose second package was not a name kept only the first.
+	for _, companion := range doc.Companions {
+		switch companion.Name {
+		case "tui-tools-agent":
+			if got := companion.Package(); got != "tui-tools-agent" {
+				t.Errorf("the default package name is %q", got)
+			}
+		case "half-evil":
+			if got := strings.Join(companion.Packages, " "); got != "half-evil" {
+				t.Errorf("packages = %q, want the injected one dropped", got)
+			}
+		}
+	}
+	for _, pkg := range doc.CompanionNames() {
+		if !validName(pkg) {
+			t.Errorf("kept %q, which could reach a command line", pkg)
+		}
+	}
+}
+
+// The field arrived after this launcher shipped, so a document without it has
+// to read exactly as it did before: the tools, and no companions.
+func TestParseReadsADocumentWithNoCompanions(t *testing.T) {
+	doc, err := Parse([]byte(sample))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(doc.Companions) != 0 {
+		t.Errorf("a document with no companions produced %d", len(doc.Companions))
+	}
+	if len(doc.CompanionNames()) != 0 {
+		t.Errorf("CompanionNames = %v, want none", doc.CompanionNames())
+	}
+	if len(CompanionRows(doc, nil, nil, nil)) != 0 {
+		t.Error("a document with no companions produced rows")
+	}
+}
+
+func TestCompanionRowsClassifyTheMachine(t *testing.T) {
+	doc, err := Parse([]byte(companions))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	rows := CompanionRows(doc,
+		map[string]string{"headscale": "0.26.0"},
+		map[string]string{"headscale": "0.26.1", "tui-tools-agent": "0.1.0"},
+		map[string]Origin{"headscale": {
+			Repo: "extra", Offered: true, Version: "0.26.1"}})
+
+	byName := map[string]Row{}
+	for _, row := range rows {
+		byName[row.Name] = row
+	}
+
+	mirror := byName["headscale"]
+	if mirror.State != StateOutdated {
+		t.Errorf("headscale = %q, want %q", mirror.State, StateOutdated)
+	}
+	if mirror.Kind != KindMirror || !mirror.IsCompanion() {
+		t.Errorf("kind = %q", mirror.Kind)
+	}
+	// A companion declares no platforms, and the repository having a build for
+	// this machine is what `available` already answered.
+	if !mirror.Supported || mirror.Compat == "" {
+		t.Errorf("supported = %v, compat = %q", mirror.Supported, mirror.Compat)
+	}
+	if !mirror.Switchable() {
+		t.Error("a package installed from extra that the family also offers is not switchable")
+	}
+	// The kind is what the category cell shows, so the badge is on the card.
+	if mirror.Category != string(KindMirror) {
+		t.Errorf("category = %q, want the kind", mirror.Category)
+	}
+
+	component := byName["tui-tools-agent"]
+	if component.State != StateNotInstalled {
+		t.Errorf("tui-tools-agent = %q, want %q", component.State, StateNotInstalled)
+	}
+	if component.Switchable() {
+		t.Error("a package that is not installed was offered a switch")
+	}
+}
+
+// A companion that already comes from the family repository has nothing to
+// switch to, and neither has a tool.
+func TestSwitchableIsOnlyForAForeignCompanion(t *testing.T) {
+	doc, _ := Parse([]byte(companions))
+	rows := CompanionRows(doc, map[string]string{"headscale": "0.26.1"},
+		map[string]string{"headscale": "0.26.1"},
+		map[string]Origin{"headscale": {
+			Repo: "tui-tools", Family: true, Offered: true, Version: "0.26.1"}})
+	if rows[0].Switchable() {
+		t.Error("a package that already comes from the family repository was offered a switch")
+	}
+	tools := Rows(doc, nil, nil)
+	if tools[0].IsCompanion() || tools[0].Switchable() {
+		t.Error("a tool was treated as a companion")
+	}
+}
+
+// --demo needs a component on screen, and it must never invent one twice or
+// invent one the document already carries.
+func TestWithExampleComponentOnlyFillsAGap(t *testing.T) {
+	doc, _ := Parse([]byte(sample))
+	filled := WithExampleComponent(doc)
+	if len(filled.Companions) != 1 ||
+		filled.Companions[0].Name != ExampleComponentName {
+		t.Fatalf("companions = %+v", filled.Companions)
+	}
+	if again := WithExampleComponent(filled); len(again.Companions) != 1 {
+		t.Errorf("a second call added another one: %+v", again.Companions)
+	}
+	withOne, _ := Parse([]byte(companions))
+	if got := len(WithExampleComponent(withOne).Companions); got != 3 {
+		t.Errorf("a document with a component of its own grew to %d entries", got)
+	}
+}
+
 func TestParseKeepsOnlyWhatMayBeActedOn(t *testing.T) {
 	doc, err := Parse([]byte(sample))
 	if err != nil {
@@ -103,7 +259,16 @@ func TestSnapshot(t *testing.T) {
 			t.Error("the launcher is in its own install list")
 		}
 	}
-	t.Logf("snapshot: %d tools, generated %s", len(doc.Tools), doc.Generated)
+	for _, companion := range doc.Companions {
+		if companion.Summary == "" || companion.Package() == "" {
+			t.Errorf("%s: incomplete companion %+v", companion.Name, companion)
+		}
+		if companion.Kind == KindMirror && companion.Upstream == "" {
+			t.Errorf("%s is a mirror of nothing", companion.Name)
+		}
+	}
+	t.Logf("snapshot: %d tools, %d companions, generated %s",
+		len(doc.Tools), len(doc.Companions), doc.Generated)
 }
 
 func TestRowsClassifyTheMachine(t *testing.T) {
