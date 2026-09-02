@@ -3,7 +3,7 @@
   "name": "tui-tools",
   "binary": "tui-tools",
   "tagline": "Every tui-tools tool in one place, installed through your package manager",
-  "description": "The launcher of the [tui-tools](https://tui.tools) family. Every tool of the family is a card: what it does, whether this machine has it, which version, and whether the repository offers a newer one.\n\nInstall, update and remove go through the distribution's own package manager — `apt`, `dnf` or `pacman` — and each one is previewed as the exact command line and confirmed before it runs. `enter` hands the terminal to an installed tool and takes it back when the tool exits.\n\nThe catalog it reads only says which tools exist and what they are called. It never decides what reaches the machine: your package manager verifies the signed repository index and the signed package, and no name from the catalog reaches a command line unless it matched `tui-<word>` twice. A snapshot of the catalog is built into the binary, so the dashboard works with no network at all.\n\nIf the repository is not configured yet, `s` shows the setup for your distribution with the signing key pinned by fingerprint.\n\nRun `tui-tools --demo` for a sample machine where every key works and nothing is installed, removed or started.",
+  "description": "The launcher of the [tui-tools](https://tui.tools) family. Every tool of the family is a card: what it does, whether this machine has it, which version, and whether the repository offers a newer one.\n\nA second group holds the companions: family packages that are not terminal UIs, and upstream projects rebuilt under the family provenance gate. The row says which repository the installed copy came from; `o` switches it to the family's build.\n\nInstall, update and remove go through the distribution's own package manager — `apt`, `dnf` or `pacman` — each previewed as the exact command line and confirmed before it runs. `enter` hands the terminal to an installed tool and takes it back on exit.\n\nThe catalog it reads only says which packages exist. It never decides what reaches the machine: your package manager verifies the signed repository index and the signed package, and every package name in it is validated twice before it can reach a command line. A snapshot of it is built into the binary, so the dashboard works offline.\n\n`s` sets the repository up, with the key pinned by fingerprint.\n\nRun `tui-tools --demo` for a sample machine where every key works and nothing is touched.",
   "category": "packages",
   "homepage": "https://github.com/tui-tools/tui-tools",
   "repo": "https://github.com/tui-tools/tui-tools",
@@ -40,7 +40,7 @@
   "keys": [
     {
       "key": "enter",
-      "action": "Launch the selected tool, and come back to the dashboard when it exits"
+      "action": "Launch the selected tool; on a companion, show its full status instead"
     },
     {
       "key": "i",
@@ -53,6 +53,10 @@
     {
       "key": "x / d",
       "action": "Remove it; nothing it pulled in is autoremoved"
+    },
+    {
+      "key": "o",
+      "action": "Switch a companion to the tui-tools build, when it came from elsewhere"
     },
     {
       "key": "s",
@@ -97,6 +101,10 @@
         {
           "range": ">=6.0",
           "impact": "the repository setup writes a `[tui-tools]` section under /etc/pacman.d and adds one Include line to pacman.conf, so a later setup finds it again instead of appending a second block"
+        },
+        {
+          "range": ">=6.0",
+          "impact": "pacman records no repository for an installed package, so a companion's origin is inferred rather than read: a bare `[installed]` in `pacman -Sl tui-tools` means the machine has the version that repository offers, and `pacman -Si` names the repository whose version matches the installed one"
         }
       ],
       "tested": []
@@ -119,6 +127,10 @@
         {
           "range": ">=2.0",
           "impact": "the available version comes from `apt-cache policy`, which reads the lists already on disk; a repository added a moment ago reports nothing until the refresh, which is the first previewed step of an install rather than something the read path does behind you"
+        },
+        {
+          "range": ">=2.0",
+          "impact": "a companion's origin is read off `apt-cache policy`: the version marked `***` is the installed one, and the first source under it that is not /var/lib/dpkg/status is where it came from. apt cannot install from a named repository, so a switch names the family's version instead"
         }
       ]
     },
@@ -150,6 +162,10 @@
         {
           "range": ">=4.0",
           "impact": "the available version comes from `dnf repoquery`, which answers from the cache on disk, so a machine whose metadata has expired reports what it last fetched rather than refreshing behind you"
+        },
+        {
+          "range": ">=4.0",
+          "impact": "dnf is the one manager that records where an installed package came from, so a companion's origin is read rather than inferred: `dnf repoquery --installed --qf '%{name}|%{from_repo}'` answers it on dnf4 and dnf5, and `@System` means it came from a file"
         }
       ]
     }

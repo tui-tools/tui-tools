@@ -24,6 +24,14 @@ func FuzzParse(f *testing.F) {
 	// test sample carries an entry of every kind the parser has to refuse.
 	f.Add(string(snapshot))
 	f.Add(sample)
+	// The companions array, which reaches an argv the same way the tools do.
+	f.Add(companions)
+	f.Add(`{"schema":1,"tools":[{"name":"tui-cert","package":"tui-cert"}],` +
+		`"companions":[{"name":"headscale","kind":"mirror","packages":["headscale; rm -rf /"]}]}`)
+	f.Add(`{"schema":1,"tools":[{"name":"tui-cert","package":"tui-cert"}],` +
+		`"companions":[{"name":"headscale","kind":"whatever"}]}`)
+	f.Add(`{"schema":1,"tools":[{"name":"tui-cert","package":"tui-cert"}],` +
+		`"companions":[{"name":"headscale","kind":"mirror","packages":[]}]}`)
 	// The shapes a real document never has.
 	f.Add("")
 	f.Add("{}")
@@ -74,11 +82,46 @@ func FuzzParse(f *testing.F) {
 		if len(doc.Names()) != len(doc.Tools) {
 			t.Fatalf("Names() returned %d of %d tools", len(doc.Names()), len(doc.Tools))
 		}
+		// A companion's package name reaches an argv exactly like a tool's, so
+		// it is held to the same promise: nothing survives that internal/
+		// packages would refuse to build a command from.
+		previous = ""
+		for _, companion := range doc.Companions {
+			if !validName(companion.Name) {
+				t.Fatalf("kept a companion name this family would not use: %q",
+					companion.Name)
+			}
+			if companion.Kind != KindMirror && companion.Kind != KindComponent {
+				t.Fatalf("kept a companion of kind %q", companion.Kind)
+			}
+			if len(companion.Packages) == 0 {
+				t.Fatalf("kept %q, which names no package", companion.Name)
+			}
+			for _, pkg := range companion.Packages {
+				if !validName(pkg) {
+					t.Fatalf("kept a package name that could reach a command line: %q", pkg)
+				}
+			}
+			if companion.Name < previous {
+				t.Fatalf("companions are out of order: %q before %q",
+					previous, companion.Name)
+			}
+			previous = companion.Name
+		}
+
 		// Rows is what the dashboard draws, over whatever the package manager
 		// happened to report. Every card has to say something about itself.
-		for _, row := range Rows(doc, nil, map[string]string{"tui-cert": "9.9.9-1"}) {
+		rows := append(
+			Rows(doc, nil, map[string]string{"tui-cert": "9.9.9-1"}),
+			CompanionRows(doc, map[string]string{"headscale": "0.1.0"},
+				map[string]string{"headscale": "0.2.0"},
+				map[string]Origin{"headscale": {Repo: "extra", Offered: true}})...)
+		for _, row := range rows {
 			if row.State == "" || row.Compat == "" {
 				t.Fatalf("card without a state or a compatibility line: %+v", row)
+			}
+			if row.Switchable() && !row.IsCompanion() {
+				t.Fatalf("a tool was offered a repository switch: %+v", row)
 			}
 		}
 	})

@@ -14,7 +14,7 @@ import (
 
 // offline is the source every test reads: the snapshot in the binary, so a
 // test never depends on tui.tools answering.
-var offline = catalogSource{url: catalog.URL, offline: true}
+var offline = catalogSource{url: catalog.URL, offline: true, demo: true}
 
 // newTestApp builds a dashboard around the demo machine and drives its first
 // read to completion, so the tests start where a user starts: with the cards
@@ -36,6 +36,9 @@ func newTestApp(t *testing.T) (*app, *packages.Fake) {
 	installedPkgs[doc.Tools[1].Package] = "0.1.1"
 
 	backend := packages.NewFake(doc.Names(), installedPkgs, availablePkgs)
+	// The same companion machine --demo drives: a mirror installed from
+	// somewhere else, and a component that is not installed.
+	stockCompanions(backend, doc)
 	a := newApp(backend, theme.New(), nil, offline)
 	a.width, a.height = 120, 40
 
@@ -313,6 +316,191 @@ func TestFilterSearchesTheWholeCard(t *testing.T) {
 	}
 }
 
+// selectCompanion puts the cursor on the first companion of a kind.
+func selectCompanion(t *testing.T, a *app, kind catalog.Kind) catalog.Row {
+	t.Helper()
+	for i, row := range a.visible {
+		if row.Kind == kind {
+			a.cursor = i
+			return row
+		}
+	}
+	t.Fatalf("the dashboard shows no %s", kind)
+	return catalog.Row{}
+}
+
+// The companions are a group of their own, under the tools, with a heading the
+// cursor never lands on.
+func TestCompanionsAreGroupedBelowTheTools(t *testing.T) {
+	a, _ := newTestApp(t)
+
+	seenCompanion := false
+	for _, row := range a.visible {
+		if row.IsCompanion() {
+			seenCompanion = true
+			continue
+		}
+		if seenCompanion {
+			t.Fatalf("%s is a tool below the companions", row.Name)
+		}
+	}
+	if !seenCompanion {
+		t.Fatal("the demo machine shows no companion")
+	}
+
+	headings := 0
+	for _, l := range a.lines {
+		if l.heading != "" {
+			headings++
+			if l.row != -1 {
+				t.Error("a heading is selectable")
+			}
+		}
+	}
+	if headings != 1 {
+		t.Errorf("the list drew %d headings, want the one over the companions",
+			headings)
+	}
+	if len(a.lines) != len(a.visible)+1 {
+		t.Errorf("%d lines for %d rows", len(a.lines), len(a.visible))
+	}
+	// The heading takes a line, so the cursor and the offset count different
+	// things and moving to the end must still leave the selection on screen.
+	a.cursor = len(a.visible) - 1
+	a.clampCursor()
+	at := a.lineOf(a.cursor)
+	if at < a.offset || at >= a.offset+a.listHeight() {
+		t.Errorf("line %d is outside the window [%d, %d)",
+			at, a.offset, a.offset+a.listHeight())
+	}
+}
+
+// A companion is not a terminal UI: enter opens what it knows about it instead
+// of trying to start something that does not exist.
+func TestEnterOnACompanionShowsItsStatusInsteadOfLaunching(t *testing.T) {
+	a, backend := newTestApp(t)
+	row := selectCompanion(t, a, catalog.KindMirror)
+	if row.Installed == "" {
+		t.Fatal("the demo mirror is not installed, so this proves nothing")
+	}
+
+	press(t, a, "enter")
+	if a.mode != modeDetail {
+		t.Fatalf("enter on a companion opened mode %v", a.mode)
+	}
+	if len(backend.Launched) != 0 {
+		t.Errorf("enter tried to start %v", backend.Launched)
+	}
+	if !strings.Contains(a.View(), row.Name) {
+		t.Error("the status screen does not name the companion")
+	}
+	// And any key returns to the dashboard.
+	press(t, a, "q")
+	if a.mode != modeList {
+		t.Errorf("the status screen did not close, mode = %v", a.mode)
+	}
+}
+
+// The demo machine's mirror came from another repository, which is the case the
+// origin check exists for: the row says so, and o previews the exact command
+// that replaces it with the family's build.
+func TestSwitchPreviewsAndRunsTheSameCommand(t *testing.T) {
+	a, backend := newTestApp(t)
+	row := selectCompanion(t, a, catalog.KindMirror)
+
+	if row.Origin.Repo != "extra" || row.Origin.Family {
+		t.Fatalf("the demo mirror came from %+v", row.Origin)
+	}
+	if !row.Switchable() {
+		t.Fatal("the demo mirror is not switchable, so o has nothing to do")
+	}
+	if got := stateCell(row); got != "from: extra" {
+		t.Errorf("the row says %q, want it to name the repository", got)
+	}
+
+	press(t, a, "o")
+	if a.mode != modeConfirm {
+		t.Fatalf("o did not open the confirm dialog, mode = %v", a.mode)
+	}
+	previewed := a.confirm.Command
+	if !strings.Contains(previewed, packages.RepoName+"/"+row.Package) {
+		t.Errorf("the preview does not name the family repository: %q", previewed)
+	}
+	// The provenance point is what the dialog is for, and it has to be in it.
+	if !strings.Contains(a.confirm.Body, packages.ProvenanceLine) {
+		t.Errorf("the dialog does not make the provenance point: %q", a.confirm.Body)
+	}
+
+	cmd := press(t, a, "y")
+	if cmd == nil {
+		t.Fatal("confirming the switch ran nothing")
+	}
+	msg, ok := cmd().(ranMsg)
+	if !ok {
+		t.Fatalf("confirming produced %T, want a ranMsg", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("the switch failed: %v", msg.err)
+	}
+	if ran := strings.Join(backend.Previews(), "\n$ "); ran != previewed {
+		t.Errorf("what ran is not what was previewed:\n previewed: %q\n ran:       %q",
+			previewed, ran)
+	}
+	// The machine moved: the package now comes from the family repository.
+	if from := backend.Companions[row.Package].From; from != packages.RepoName {
+		t.Errorf("after the switch the package comes from %q", from)
+	}
+}
+
+// And the switch is refused where it makes no sense, before a dialog opens.
+func TestSwitchIsRefusedWhereItMakesNoSense(t *testing.T) {
+	a, backend := newTestApp(t)
+
+	selectRow(t, a, a.rows[0].Package) // a tool
+	press(t, a, "o")
+	if a.mode == modeConfirm {
+		t.Error("a tool was offered a repository switch")
+	}
+
+	selectCompanion(t, a, catalog.KindComponent) // not installed
+	press(t, a, "o")
+	if a.mode == modeConfirm {
+		t.Error("a package that is not installed was offered a switch")
+	}
+	if len(backend.Ran) != 0 {
+		t.Errorf("a refused switch still ran %v", backend.Previews())
+	}
+}
+
+// Installing a companion goes through the same preview-and-confirm path as a
+// tool, with a name tui-kit would refuse to build a command from.
+func TestInstallingACompanionIsPreviewedAndConfirmed(t *testing.T) {
+	a, backend := newTestApp(t)
+	row := selectCompanion(t, a, catalog.KindComponent)
+
+	press(t, a, "i")
+	if a.mode != modeConfirm {
+		t.Fatalf("i did not open the confirm dialog, mode = %v", a.mode)
+	}
+	previewed := a.confirm.Command
+	if !strings.Contains(previewed, row.Package) {
+		t.Fatalf("the preview does not name %s: %q", row.Package, previewed)
+	}
+
+	cmd := press(t, a, "y")
+	msg, ok := cmd().(ranMsg)
+	if !ok {
+		t.Fatalf("confirming produced %T, want a ranMsg", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("the install failed: %v", msg.err)
+	}
+	if ran := strings.Join(backend.Previews(), "\n$ "); ran != previewed {
+		t.Errorf("what ran is not what was previewed:\n previewed: %q\n ran:       %q",
+			previewed, ran)
+	}
+}
+
 // Every screen has to render at every width the family supports, because a
 // panel that wraps desynchronises Bubble Tea's line accounting and every frame
 // after it is drawn in the wrong place.
@@ -321,7 +509,7 @@ func TestEveryScreenRendersAtEveryWidth(t *testing.T) {
 	for _, size := range [][2]int{{40, 12}, {80, 24}, {120, 40}, {200, 60}} {
 		a.width, a.height = size[0], size[1]
 		a.clampCursor()
-		for _, m := range []mode{modeList, modeHelp, modeOutput} {
+		for _, m := range []mode{modeList, modeHelp, modeOutput, modeDetail} {
 			a.mode = m
 			if a.View() == "" {
 				t.Errorf("mode %v rendered nothing at %dx%d", m, size[0], size[1])

@@ -111,6 +111,12 @@ echo "      machine=$machine"
 
 report=$("$bin" --check 2>&1)
 
+# The report carries two arrays, and they are held to different rules: a tool is
+# always tui-<word>, while a companion carries the upstream project's own name.
+# So each is read on its own rather than by grepping the whole document.
+tools_array=$(awk '/"tools": \[/, /^  \],?$/' <<<"$report")
+companions_array=$(awk '/"companions": \[/, /^  \],?$/' <<<"$report")
+
 # 1. The read path works at all, unprivileged. Listing what is installed and
 #    what the repositories offer takes no privileges, so this runs as the plain
 #    lab user — which is itself the assertion that the launcher does not
@@ -142,16 +148,29 @@ check "the catalog carries the family" \
   "$bin --check | grep -c '\"package\": \"tui-'" \
   '^([5-9]|[1-9][0-9]+)$'
 
-# 4. Every name that could reach a package manager is one of ours. This is the
-#    assertion the whole trust boundary comes down to, checked against the
-#    document the machine really fetched rather than against a fixture.
-odd=$(grep '"package":' <<<"$report" |
+# 4. Every name that could reach a package manager is one this launcher would
+#    build a command from. This is the assertion the whole trust boundary comes
+#    down to, checked against the document the machine really fetched rather
+#    than against a fixture.
+odd=$(grep '"package":' <<<"$tools_array" |
   grep -cvE '"package": "tui-[a-z]+"')
 if [[ $odd -eq 0 ]]; then
-  printf 'PASS  every package name is tui-<word>\n'
+  printf 'PASS  every tool package name is tui-<word>\n'
   pass=$((pass + 1))
 else
-  printf 'FAIL  %d package name(s) are not tui-<word>\n' "$odd"
+  printf 'FAIL  %d tool package name(s) are not tui-<word>\n' "$odd"
+  fail=$((fail + 1))
+fi
+
+# A companion is not called tui-<word> — a mirror carries the upstream
+# project's own name — so its names are held to the companion pattern instead.
+odd=$(grep -E '"(package|name)":' <<<"$companions_array" |
+  grep -cvE '"(package|name)": "[a-z][a-z0-9]*(-[a-z0-9]+)*"')
+if [[ $odd -eq 0 ]]; then
+  printf 'PASS  every companion name is one a command may carry\n'
+  pass=$((pass + 1))
+else
+  printf 'FAIL  %d companion name(s) are not\n' "$odd"
   fail=$((fail + 1))
 fi
 
@@ -189,9 +208,8 @@ esac
 # The launcher itself is not in the report, so it is dropped from the machine's
 # list before the two are compared.
 have=$(grep -v '^tui-tools$' <<<"$have")
-said=$(sed -n '/"tools": \[/,$p' <<<"$report" |
-  awk '/"package":/ { pkg = $2 } /"installed":/ { print pkg }' |
-  tr -d '",' | sort)
+said=$(awk '/"package":/ { pkg = $2 } /"installed":/ { print pkg }' \
+  <<<"$tools_array" | tr -d '",' | sort)
 if [[ "$(tr -d '[:space:]' <<<"$have")" == "$(tr -d '[:space:]' <<<"$said")" ]]; then
   printf 'PASS  the installed list agrees with the package manager\n'
   pass=$((pass + 1))

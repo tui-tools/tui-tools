@@ -154,6 +154,7 @@ func run(args []string) error {
 		// A demo never reaches the network: what it shows has to be the same
 		// document every time, on every machine.
 		offline: opts.demo || cfg.Bool(keyOffline, false),
+		demo:    opts.demo,
 	}
 
 	// The configured theme is handed to the kit through the same variable the
@@ -199,12 +200,24 @@ func run(args []string) error {
 type catalogSource struct {
 	url     string
 	offline bool
+	// demo says the document is being read for --demo, which is the only
+	// caller allowed to add a sample entry to it.
+	demo bool
 }
 
 // Load reads the catalog, live or embedded, and returns the reason the live
 // one was not used when there is one.
+//
+// The demo is the one caller that gets a document the family did not publish
+// exactly: it needs a component companion on screen, because a component and a
+// mirror behave differently there, and the snapshot a given build carries may
+// have none. Nothing else ever adds an entry.
 func (s catalogSource) Load(ctx context.Context) (catalog.Catalog, string) {
-	return catalog.Load(ctx, s.url, s.offline)
+	doc, note := catalog.Load(ctx, s.url, s.offline)
+	if s.demo && len(doc.Tools) > 0 {
+		doc = catalog.WithExampleComponent(doc)
+	}
+	return doc, note
 }
 
 // applyOverrides folds the command line into the configuration, which is the
@@ -261,7 +274,35 @@ func demoBackend(source catalogSource) packages.Backend {
 			installedPkgs[tool.Package] = behind(available)
 		}
 	}
-	return packages.NewFake(names, installedPkgs, availablePkgs)
+	machine := packages.NewFake(names, installedPkgs, availablePkgs)
+	stockCompanions(machine, doc)
+	return machine
+}
+
+// stockCompanions gives the demo machine one of each companion situation worth
+// looking at.
+//
+// A mirror is installed, and installed from somewhere else — which is the case
+// the origin check exists for, and the only one where `o` has anything to do. A
+// component is not installed at all, which is the case `i` is for. Everything
+// the demo then shows is produced by the same probes, parsers and builders a
+// real machine goes through.
+func stockCompanions(machine *packages.Fake, doc catalog.Catalog) {
+	for _, companion := range doc.Companions {
+		offered := companion.Version
+		if offered == "" {
+			offered = "0.1.0"
+		}
+		state := packages.FakeCompanion{Offered: offered}
+		if companion.Kind == catalog.KindMirror {
+			state.Installed = behind(offered)
+			state.From = "extra"
+			state.OtherVersion = state.Installed
+		}
+		for _, pkg := range companion.Packages {
+			machine.Companions[pkg] = state
+		}
+	}
 }
 
 // behind returns the version one patch release older, for the demo's
