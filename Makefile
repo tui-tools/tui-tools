@@ -64,11 +64,16 @@ tidy:
 	$(GO) mod tidy
 
 ## screenshots: re-render the README frames from --demo (needs chrome/chromium).
+## The companions frame walks the cursor to the last row so the viewport scrolls
+## to the bottom, then steps back up onto headscale: that is the only position
+## where the COMPANIONS header, both companion rows and the origin of the
+## installed copy are on screen together.
 screenshots: build
 	python3 $(KIT)/tools/render-screenshots.py \
 		--bin $(BIN)/$(TOOL) --name $(TOOL) --out docs/screenshots \
 		--screen main= --screen install='jji' --screen repo=s \
-		--screen filter='/fire' --screen help=?
+		--screen filter='/fire' --screen help=? \
+		--screen companions='jjjjjjjjjjjjjjjk'
 
 ## catalog: refresh the catalog snapshot embedded in the binary, then check
 ## that what was downloaded is a document this launcher can read. The snapshot

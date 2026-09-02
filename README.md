@@ -270,6 +270,12 @@ and the same confirmation. `enter` does not launch one, because there is nothing
 to launch: it opens the full status instead, which is where the versions, the
 upstream tag and the provenance line are.
 
+![The companions](docs/screenshots/tui-tools-companions.png)
+
+The bottom of the same list: `headscale` is installed, but it came from `extra`
+rather than from the family repository, so the row says so and `o` offers the
+tui-tools build of it.
+
 ### Where the installed package came from
 
 A mirror carries the upstream project's own name, so the same name can also come
