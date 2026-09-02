@@ -682,6 +682,29 @@ func pacmanVersions(out string) map[string]string {
 	return versions
 }
 
+// pacmanSyncFirst reads `pacman -Si` and keeps the first version each package
+// is offered at, which is the version an install would actually fetch.
+//
+// The kit's own reader keeps the last, and for a tool the two are the same
+// answer: a tui-<word> package exists in one repository and the output has one
+// block. A companion carries the upstream project's name, so several
+// repositories can offer it and the output has a block for each — in the order
+// they appear in pacman.conf, which is the order `pacman -S` resolves a bare
+// name in. First is therefore the one that would be installed.
+func pacmanSyncFirst(out string) map[string]string {
+	versions := map[string]string{}
+	for _, block := range pacmanBlocks(out) {
+		name, version := block["Name"], block["Version"]
+		if name == "" || version == "" {
+			continue
+		}
+		if _, seen := versions[name]; !seen {
+			versions[name] = version
+		}
+	}
+	return versions
+}
+
 // pacmanRepoVersions reads `pacman -Si`, which prints one block per repository
 // that offers a package, and keeps the version each repository offers.
 func pacmanRepoVersions(out string) map[string]map[string]string {
@@ -778,7 +801,7 @@ func parseVersions(manager pkgmgr.Manager, out string, sync bool) map[string]str
 	switch manager {
 	case pkgmgr.ManagerPacman:
 		if sync {
-			return pkgmgr.ParsePacmanSync(out)
+			return pacmanSyncFirst(out)
 		}
 		return pkgmgr.ParsePacmanQuery(out)
 	case pkgmgr.ManagerAPT:

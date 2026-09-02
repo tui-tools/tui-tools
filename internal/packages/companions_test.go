@@ -315,6 +315,17 @@ func TestSwitchRefusesWhatItCannotName(t *testing.T) {
 	}
 }
 
+// Several repositories can offer the same companion, and `pacman -S` takes the
+// first one pacman.conf lists. The available version has to be that one, or a
+// row claims an update the machine would not get.
+func TestPacmanAvailableIsTheVersionAnInstallWouldFetch(t *testing.T) {
+	got := parseVersions(pkgmgr.ManagerPacman, pacmanSync, true)
+	if got["headscale"] != "0.25.1-1" {
+		t.Errorf("available = %q, want the first repository's %q",
+			got["headscale"], "0.25.1-1")
+	}
+}
+
 // demoMachine is the companion machine --demo drives: a mirror installed from
 // somewhere else, and a component that is not installed.
 func demoMachine() *Fake {
@@ -341,7 +352,11 @@ func TestDemoCompanionsGoThroughTheRealParsers(t *testing.T) {
 	if installed["tui-tools-example"] != "" {
 		t.Errorf("a component nobody installed is installed: %v", installed)
 	}
-	if available["headscale"] != "0.26.1-1" ||
+	// The demo machine has the family repository last in pacman.conf, as a real
+	// one does, so what a bare install would fetch is the distribution's build
+	// and that is what "available" says. What the family offers is a separate
+	// answer, and it is in the origin.
+	if available["headscale"] != "0.25.1-1" ||
 		available["tui-tools-example"] != "0.1.0-1" {
 		t.Errorf("available = %v", available)
 	}

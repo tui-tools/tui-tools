@@ -312,6 +312,13 @@ func glyph(row catalog.Row) string {
 
 // versionCell renders the versions the way the state reads them.
 func versionCell(row catalog.Row) string {
+	// A row offering a switch reads against the family repository rather than
+	// against whichever repository the machine happens to prefer: what the
+	// switch would install is the number the user is deciding about.
+	if row.Switchable() && row.Origin.Version != "" &&
+		row.Origin.Version != row.Installed {
+		return row.Installed + " → " + row.Origin.Version
+	}
 	switch row.State {
 	case catalog.StateOutdated:
 		return row.Installed + " → " + row.Available
@@ -455,7 +462,14 @@ func verifyHint(row catalog.Row) string {
 	if slug == "" || slug == row.Repo {
 		slug = "tui-tools/" + row.Name
 	}
-	return "gh attestation verify " + row.Name + "_" + blank(row.Available) +
+	// The file to check is the family's own release, so a companion the machine
+	// has from elsewhere is named at the version the family publishes rather
+	// than at the one that happens to be installed.
+	version := row.Available
+	if row.IsCompanion() && row.Origin.Version != "" {
+		version = row.Origin.Version
+	}
+	return "gh attestation verify " + row.Name + "_" + blank(version) +
 		"_linux_amd64.tar.gz -R " + slug
 }
 

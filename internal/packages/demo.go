@@ -226,16 +226,21 @@ func (f *Fake) sync(names []string) string {
 }
 
 // reposOffering lists the repositories that carry a companion on the demo
-// machine, sorted so the output does not change between runs.
+// machine, in the order pacman.conf would have them.
+//
+// The distribution's own repositories come first and the family's last, because
+// that is where the repository setup puts it: it appends one Include line to the
+// end of pacman.conf. So a bare `pacman -S headscale` on such a machine takes
+// the distribution's build, which is exactly the situation the origin check
+// exists to show, and the demo has to show it as it really is.
 func (f *Fake) reposOffering(companion FakeCompanion) []string {
 	var repos []string
-	if companion.Offered != "" {
-		repos = append(repos, RepoName)
-	}
 	if companion.From != "" && companion.From != RepoName {
 		repos = append(repos, companion.From)
 	}
-	sort.Strings(repos)
+	if companion.Offered != "" {
+		repos = append(repos, RepoName)
+	}
 	return repos
 }
 
