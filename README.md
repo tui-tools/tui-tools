@@ -167,7 +167,7 @@ Upgrades then arrive with the rest of your system updates.
 ### Any distribution, static binary
 
 ```sh
-curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.1.3/tui-tools_0.1.3_linux_amd64.tar.gz | tar -xz tui-tools
+curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.2.0/tui-tools_0.2.0_linux_amd64.tar.gz | tar -xz tui-tools
 sudo install -m0755 tui-tools /usr/local/bin/tui-tools
 ```
 
@@ -269,6 +269,12 @@ They install, update and remove exactly like a tool, through the same preview
 and the same confirmation. `enter` does not launch one, because there is nothing
 to launch: it opens the full status instead, which is where the versions, the
 upstream tag and the provenance line are.
+
+![The companions](docs/screenshots/tui-tools-companions.png)
+
+The bottom of the same list: `headscale` is installed, but it came from `extra`
+rather than from the family repository, so the row says so and `o` offers the
+tui-tools build of it.
 
 ### Where the installed package came from
 
