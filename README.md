@@ -167,7 +167,7 @@ Upgrades then arrive with the rest of your system updates.
 ### Any distribution, static binary
 
 ```sh
-curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.2.1/tui-tools_0.2.1_linux_amd64.tar.gz | tar -xz tui-tools
+curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.2.2/tui-tools_0.2.2_linux_amd64.tar.gz | tar -xz tui-tools
 sudo install -m0755 tui-tools /usr/local/bin/tui-tools
 ```
 
@@ -522,7 +522,7 @@ hidden; one below the minimum is marked as such and the tool still runs.
 | Binary | `apt` |
 | Version read with | `apt --version` |
 | Minimum | 2.0 |
-| Tested | `2.8.3` |
+| Tested | `2.8.3`, `3.2.0` |
 
 | Versions | What changes |
 | --- | --- |
