@@ -93,9 +93,13 @@ func BuildCompanionInstalled(manager pkgmgr.Manager,
 	}
 	switch manager {
 	case pkgmgr.ManagerAPT:
+		// dpkg also answers names it knows without them being installed (the
+		// Suggests: of an installed package, one removed but not purged), so
+		// the status comes along and parseVersions keeps only `installed`.
+		// The same format the kit's BuildInstalled asks for the tools.
 		return pkgmgr.Command{
 			Argv: append([]string{
-				"dpkg-query", "-W", "-f=${Package}|${Version}\n",
+				"dpkg-query", "-W", "-f=${Package}|${Version}|${db:Status-Status}\n",
 			}, names...),
 			Explain: "Read the installed versions from the dpkg database",
 		}, nil
@@ -808,7 +812,7 @@ func parseVersions(manager pkgmgr.Manager, out string, sync bool) map[string]str
 		if sync {
 			return pkgmgr.ParseAPTPolicy(out)
 		}
-		return pkgmgr.ParsePipedVersions(out)
+		return pkgmgr.ParseDpkgStatus(out)
 	default:
 		return pkgmgr.ParsePipedVersions(out)
 	}

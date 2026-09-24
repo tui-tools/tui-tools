@@ -108,6 +108,64 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -o "/tmp/tui-tools_${GOARCH}" ./cmd/tui-tools
 
+  # The launcher is installed as a .deb, and the .deb carries the family in
+  # Suggests:, so dpkg knows every sibling name from the moment it is
+  # installed and answers them as `name||not-installed`. A build run from the
+  # checkout never meets that shape, which is how a launcher that could not
+  # read an Ubuntu machine once shipped (#20). This builds the package the way
+  # the release does, installs it on the LTS and on the next release, and
+  # reads the machine through the installed binary.
+  #
+  # The catalog is served from the runner with one name added that no package
+  # names: dpkg-query then also exits non-zero, which is the combination the
+  # read has to survive. The embedded snapshot alone names only packages the
+  # Suggests: already made known, and dpkg-query exits 0 on those.
+  deb-install:
+    name: installed .deb on ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: ["ubuntu:24.04", "ubuntu:devel"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # go.mod is the single place the family's Go version lives, so a
+          # bump there moves CI with it.
+          go-version-file: go.mod
+          check-latest: true
+
+      # The release configuration itself, minus the steps that need the
+      # release job's identity (signing) or its tools (syft).
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=publish,sign,sbom
+
+      - name: serve a catalog with a name dpkg does not know
+        run: |
+          mkdir -p "$RUNNER_TEMP/catalog"
+          jq '.tools += [(.tools[0] | .name = "tui-unknown"
+                | .package = "tui-unknown" | .binary = "tui-unknown")]' \
+            internal/catalog/snapshot.json > "$RUNNER_TEMP/catalog/catalog.json"
+          python3 -m http.server 8321 --bind 127.0.0.1 \
+            --directory "$RUNNER_TEMP/catalog" >/dev/null 2>&1 &
+          sleep 1
+          curl -fsS -o /dev/null http://127.0.0.1:8321/catalog.json
+
+      - name: install the .deb and read the machine
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          deb=$(basename dist/tui-tools_*_amd64.deb)
+          docker run --rm --network host -v "$PWD/dist:/dist:ro" "$IMAGE" \
+            sh -c "dpkg -i '/dist/$deb' >/dev/null &&
+              tui-tools --check --catalog http://127.0.0.1:8321/catalog.json" \
+            > check.json
+          jq -c '{catalog: .catalog.source, summary: .summary}' check.json
+          jq -e '.catalog.source == "live" and .summary.installed == 0' check.json
+
   manifest:
     name: validate tool.json
     runs-on: ubuntu-latest

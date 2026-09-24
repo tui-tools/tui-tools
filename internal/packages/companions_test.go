@@ -2,6 +2,7 @@ package packages
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -323,6 +324,62 @@ func TestPacmanAvailableIsTheVersionAnInstallWouldFetch(t *testing.T) {
 	if got["headscale"] != "0.25.1-1" {
 		t.Errorf("available = %q, want the first repository's %q",
 			got["headscale"], "0.25.1-1")
+	}
+}
+
+// The dpkg query carries the package status, the same format the kit asks
+// for the tools: without it a name dpkg only knows is indistinguishable from
+// an installed package.
+func TestAPTInstalledQueryAsksForTheStatus(t *testing.T) {
+	cmd, err := BuildCompanionInstalled(pkgmgr.ManagerAPT,
+		[]string{"headscale", "tui-headscale"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"dpkg-query", "-W",
+		"-f=${Package}|${Version}|${db:Status-Status}\n",
+		"headscale", "tui-headscale"}
+	if strings.Join(cmd.Argv, " ") != strings.Join(want, " ") {
+		t.Errorf("argv = %q, want %q", cmd.Argv, want)
+	}
+}
+
+// dpkgMachine answers the companion reads the way an Ubuntu machine does.
+type dpkgMachine struct {
+	Backend
+	answers map[string]string
+}
+
+func (m dpkgMachine) Manager() pkgmgr.Manager { return pkgmgr.ManagerAPT }
+
+func (m dpkgMachine) Run(_ context.Context, cmd pkgmgr.Command) (string, error) {
+	out := m.answers[cmd.Argv[0]]
+	if cmd.Argv[0] == "dpkg-query" {
+		// dpkg-query exits 1 whenever one of the names is not installed.
+		return out, errors.New("exit status 1")
+	}
+	return out, nil
+}
+
+// dpkg answers a name it learnt from the Suggests: of an installed package
+// with an empty version and `not-installed`, and a package removed but not
+// purged with its old version and `config-files`. Neither is installed, and
+// neither is a failure to read.
+func TestAPTCompanionKnownToDpkgIsNotInstalled(t *testing.T) {
+	machine := dpkgMachine{answers: map[string]string{
+		"dpkg-query": "headscale|0.26.1-1|installed\n" +
+			"tui-headscale||not-installed\n" +
+			"tui-tools-example|0.1.0-1|config-files\n",
+	}}
+	installed, _ := CompanionVersions(context.Background(), machine,
+		[]string{"headscale", "tui-headscale", "tui-tools-example"})
+	if installed["headscale"] != "0.26.1-1" {
+		t.Errorf("installed = %v, want headscale at 0.26.1-1", installed)
+	}
+	for _, name := range []string{"tui-headscale", "tui-tools-example"} {
+		if _, ok := installed[name]; ok {
+			t.Errorf("%s is read as installed: %v", name, installed)
+		}
 	}
 }
 
