@@ -200,7 +200,9 @@ check "the pinned signing key is the family's" \
 # 8. What --check says is installed is what the package manager says. The
 #    launcher's whole read path is this one claim.
 case "$machine" in
-  ubuntu) have=$(dpkg-query -W -f '${Package}\n' 'tui-*' 2>/dev/null | sort) ;;
+  # dpkg also lists names it merely knows (Suggests:, Conflicts:), so keep only installed ones.
+  ubuntu) have=$(dpkg-query -W -f '${Package} ${db:Status-Status}\n' 'tui-*' 2>/dev/null |
+    awk '$2 == "installed" { print $1 }' | sort) ;;
   fedora) have=$(rpm -qa --qf '%{NAME}\n' 'tui-*' 2>/dev/null | sort) ;;
   arch) have=$(pacman -Qq 2>/dev/null | grep '^tui-' | sort) ;;
   *) have="" ;;
@@ -284,7 +286,9 @@ check "report leaks neither a home path nor the host name" \
 #     repository configuration. This is the assertion that makes --check safe
 #     to run against a machine somebody depends on.
 before_pkgs=$(case "$machine" in
-  ubuntu) dpkg-query -W -f '${Package} ${Version}\n' 'tui-*' 2>/dev/null | sort ;;
+  # Installed only: dpkg also lists names it merely knows from Suggests:/Conflicts:.
+  ubuntu) dpkg-query -W -f '${Package} ${Version} ${db:Status-Status}\n' 'tui-*' 2>/dev/null |
+    awk '$3 == "installed" { print $1, $2 }' | sort ;;
   fedora) rpm -qa --qf '%{NAME} %{VERSION}\n' 'tui-*' 2>/dev/null | sort ;;
   arch) pacman -Q 2>/dev/null | grep '^tui-' | sort ;;
 esac)
@@ -292,7 +296,9 @@ before_repo=$(ls /etc/apt/sources.list.d/tui-tools.list \
   /etc/yum.repos.d/tui-tools.repo /etc/pacman.d/tui-tools.conf 2>/dev/null | sort)
 "$bin" --check >/dev/null 2>&1
 after_pkgs=$(case "$machine" in
-  ubuntu) dpkg-query -W -f '${Package} ${Version}\n' 'tui-*' 2>/dev/null | sort ;;
+  # Installed only: dpkg also lists names it merely knows from Suggests:/Conflicts:.
+  ubuntu) dpkg-query -W -f '${Package} ${Version} ${db:Status-Status}\n' 'tui-*' 2>/dev/null |
+    awk '$3 == "installed" { print $1, $2 }' | sort ;;
   fedora) rpm -qa --qf '%{NAME} %{VERSION}\n' 'tui-*' 2>/dev/null | sort ;;
   arch) pacman -Q 2>/dev/null | grep '^tui-' | sort ;;
 esac)

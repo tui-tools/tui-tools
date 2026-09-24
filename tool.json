@@ -122,7 +122,9 @@
         "/usr/bin/apt",
         "/bin/apt"
       ],
-      "tested": [],
+      "tested": [
+        "2.8.3"
+      ],
       "notes": [
         {
           "range": ">=2.0",

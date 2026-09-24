@@ -522,7 +522,7 @@ hidden; one below the minimum is marked as such and the tool still runs.
 | Binary | `apt` |
 | Version read with | `apt --version` |
 | Minimum | 2.0 |
-| Tested | none yet |
+| Tested | `2.8.3` |
 
 | Versions | What changes |
 | --- | --- |
