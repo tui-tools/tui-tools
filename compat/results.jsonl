@@ -1,1 +1,2 @@
 {"backend": "apt", "date": "2026-09-24", "distro": "ubuntu-24.04", "result": "pass", "suite": "smoke", "tool": "tui-tools", "version": "2.8.3"}
+{"backend": "apt", "date": "2026-09-24", "distro": "ubuntu-26.04", "result": "pass", "suite": "smoke", "tool": "tui-tools", "version": "3.2.0"}
