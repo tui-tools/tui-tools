@@ -17,18 +17,18 @@ import (
 func TestCompanionNamesThatMayReachACommandLine(t *testing.T) {
 	for _, name := range []string{"headscale", "tui-tools-example", "caddy2",
 		"step-ca"} {
-		if !ValidCompanionName(name) {
+		if !pkgmgr.ValidCompanionName(name) {
 			t.Errorf("%q was refused", name)
 		}
 	}
 	for _, name := range []string{"", "-headscale", "headscale-", "Headscale",
 		"head scale", "headscale; rm -rf /", "$(id)", "../../bin/sh",
 		"head--scale", "head_scale", strings.Repeat("a", 65)} {
-		if ValidCompanionName(name) {
+		if pkgmgr.ValidCompanionName(name) {
 			t.Errorf("%q was allowed", name)
 		}
 	}
-	if err := CheckCompanionNames(nil); err == nil {
+	if err := pkgmgr.CheckCompanionNames(nil); err == nil {
 		t.Error("a command with no package named was allowed")
 	}
 }
@@ -39,16 +39,16 @@ func TestCompanionBuildersRefuseANameThatIsNotOne(t *testing.T) {
 	bad := []string{"headscale; rm -rf /"}
 	for _, manager := range []pkgmgr.Manager{
 		pkgmgr.ManagerAPT, pkgmgr.ManagerDNF, pkgmgr.ManagerPacman} {
-		if _, err := BuildCompanionInstall(manager, pkgmgr.Distro{}, bad); err == nil {
+		if _, err := installCompanion(manager, pkgmgr.Distro{}, bad); err == nil {
 			t.Errorf("%s: install accepted %q", manager, bad[0])
 		}
-		if _, err := BuildCompanionRemove(manager, bad); err == nil {
+		if _, err := pkgmgr.BuildCompanionRemove(manager, bad); err == nil {
 			t.Errorf("%s: remove accepted %q", manager, bad[0])
 		}
-		if _, err := BuildCompanionUpgrade(manager, pkgmgr.Distro{}, bad); err == nil {
+		if _, err := upgradeCompanion(manager, pkgmgr.Distro{}, bad); err == nil {
 			t.Errorf("%s: upgrade accepted %q", manager, bad[0])
 		}
-		if _, err := BuildCompanionInstalled(manager, bad); err == nil {
+		if _, err := pkgmgr.BuildCompanionInstalled(manager, bad); err == nil {
 			t.Errorf("%s: the installed query accepted %q", manager, bad[0])
 		}
 		if _, err := BuildOriginProbes(manager, bad); err == nil {
@@ -285,7 +285,8 @@ func TestSwitchNamesTheFamilyRepository(t *testing.T) {
 	for manager, want := range map[pkgmgr.Manager]string{
 		pkgmgr.ManagerPacman: "pacman -S --noconfirm tui-tools/headscale",
 		pkgmgr.ManagerDNF:    "dnf install --repo tui-tools -y headscale",
-		pkgmgr.ManagerAPT:    "apt-get install -y --allow-downgrades headscale=0.26.1",
+		pkgmgr.ManagerAPT: "DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a " +
+			"apt-get install -y --allow-downgrades headscale=0.26.1",
 	} {
 		steps, err := BuildCompanionSwitch(manager, "headscale", origin)
 		if err != nil {
@@ -340,7 +341,7 @@ func TestPacmanAvailableIsTheVersionAnInstallWouldFetch(t *testing.T) {
 // for the tools: without it a name dpkg only knows is indistinguishable from
 // an installed package.
 func TestAPTInstalledQueryAsksForTheStatus(t *testing.T) {
-	cmd, err := BuildCompanionInstalled(pkgmgr.ManagerAPT,
+	cmd, err := pkgmgr.BuildCompanionInstalled(pkgmgr.ManagerAPT,
 		[]string{"headscale", "tui-headscale"})
 	if err != nil {
 		t.Fatal(err)
@@ -478,7 +479,7 @@ func TestDemoInstallsAndRemovesACompanion(t *testing.T) {
 	machine := demoMachine()
 	ctx := context.Background()
 
-	steps, err := BuildCompanionInstall(machine.Manager(), machine.Distro(),
+	steps, err := installCompanion(machine.Manager(), machine.Distro(),
 		[]string{"tui-tools-example"})
 	if err != nil {
 		t.Fatalf("BuildCompanionInstall: %v", err)
@@ -493,7 +494,7 @@ func TestDemoInstallsAndRemovesACompanion(t *testing.T) {
 		t.Fatalf("after the install the machine has %v", installed)
 	}
 
-	remove, err := BuildCompanionRemove(machine.Manager(),
+	remove, err := pkgmgr.BuildCompanionRemove(machine.Manager(),
 		[]string{"tui-tools-example"})
 	if err != nil {
 		t.Fatalf("BuildCompanionRemove: %v", err)
@@ -524,8 +525,8 @@ func TestCompanionInstallAndUpgradeOnOmarchy(t *testing.T) {
 	}
 	builders := map[string]func(pkgmgr.Manager, pkgmgr.Distro,
 		[]string) ([]pkgmgr.Command, error){
-		"Install": BuildCompanionInstall,
-		"Upgrade": BuildCompanionUpgrade,
+		"Install": installCompanion,
+		"Upgrade": upgradeCompanion,
 	}
 	for verb, build := range builders {
 		for _, distro := range omarchy {
@@ -595,7 +596,7 @@ func TestDemoInstallsACompanionOnOmarchy(t *testing.T) {
 	machine.Machine = pkgmgr.Distro{ID: "omarchy", Like: []string{"arch"}}
 	ctx := context.Background()
 
-	steps, err := BuildCompanionInstall(machine.Manager(), machine.Distro(),
+	steps, err := installCompanion(machine.Manager(), machine.Distro(),
 		[]string{"tui-tools-example"})
 	if err != nil {
 		t.Fatalf("BuildCompanionInstall: %v", err)
@@ -648,7 +649,7 @@ func TestTheQualifiedInstallTakesTheFamilyBuildOverTheDistribution(t *testing.T)
 			t.Fatalf("%s: a bare -S took %+v, want the extra build", distro.ID, got)
 		}
 
-		steps, err := BuildCompanionInstall(machine.Manager(), distro,
+		steps, err := installCompanion(machine.Manager(), distro,
 			[]string{"headscale"})
 		if err != nil {
 			t.Fatalf("%s: %v", distro.ID, err)
@@ -665,4 +666,17 @@ func TestTheQualifiedInstallTakesTheFamilyBuildOverTheDistribution(t *testing.T)
 				distro.ID, installed["headscale"], origin)
 		}
 	}
+}
+
+// installCompanion and upgradeCompanion build what the launcher's dialog
+// previews for a companion (cmd/tui-tools steps): the kit's companion
+// builders, given the family-qualified targets.
+func installCompanion(manager pkgmgr.Manager, distro pkgmgr.Distro,
+	names []string) ([]pkgmgr.Command, error) {
+	return pkgmgr.BuildCompanionInstallOn(manager, distro, CompanionTargets(names))
+}
+
+func upgradeCompanion(manager pkgmgr.Manager, distro pkgmgr.Distro,
+	names []string) ([]pkgmgr.Command, error) {
+	return pkgmgr.BuildCompanionUpgradeOn(manager, distro, CompanionTargets(names))
 }
