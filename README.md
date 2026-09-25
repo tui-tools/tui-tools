@@ -276,6 +276,16 @@ and the same confirmation. `enter` does not launch one, because there is nothing
 to launch: it opens the full status instead, which is where the versions, the
 upstream tag and the provenance line are.
 
+A mirror is often in the distribution's own repositories too, and pacman.conf
+lists those before the family's, so on `pacman` a companion is always named in
+the family repository: `pacman -Syu --needed --noconfirm tui-tools/headscale` on
+Arch, `pacman -S --needed --noconfirm tui-tools/headscale` on Omarchy. A bare
+name would install the distribution's build while the dialog promised the
+family's. `apt` and `dnf` take the bare name, as every tool of the family does
+there: neither Ubuntu nor Fedora ships a companion today. A companion whose copy
+came from another repository is not updated by `u`, which would swap the build
+without saying so; `o` is the one path to the family's build.
+
 ![The companions](docs/screenshots/tui-tools-companions.png)
 
 The bottom of the same list: `headscale` is installed, but it came from `extra`

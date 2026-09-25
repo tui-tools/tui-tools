@@ -161,13 +161,23 @@ func BuildCompanionAvailable(manager pkgmgr.Manager,
 // form Arch supports. Omarchy is the exception: its guard hook refuses a direct
 // -Syu, so there the install is `-S --needed` against the databases the last
 // refresh synced (omarchyStep).
+//
+// On pacman every name is qualified with the family repository
+// (qualified): a mirror such as headscale is also in Arch's own repositories,
+// which pacman.conf lists before the family's, so a bare name would install
+// the distribution's build while the dialog promised the family's.
+// tui-tailscale installs headscale the same way. apt and dnf take the bare
+// name, which is also the family pattern there (tui-tailscale's install, the
+// kit's tools): neither Ubuntu nor Fedora ships a companion today, and a
+// dnf --repo would also hide the distribution's repositories from dependency
+// resolution.
 func BuildCompanionInstall(manager pkgmgr.Manager, distro pkgmgr.Distro,
 	names []string) ([]pkgmgr.Command, error) {
 	if err := CheckCompanionNames(names); err != nil {
 		return nil, err
 	}
 	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
-		return omarchyStep("Install", names), nil
+		return omarchyStep("Install", qualified(names)), nil
 	}
 	switch manager {
 	case pkgmgr.ManagerAPT:
@@ -190,10 +200,10 @@ func BuildCompanionInstall(manager pkgmgr.Manager, distro pkgmgr.Distro,
 		return []pkgmgr.Command{{
 			Argv: append([]string{
 				"pacman", "-Syu", "--needed", "--noconfirm",
-			}, names...),
+			}, qualified(names)...),
 			Privileged: true,
-			Explain: "Install " + strings.Join(names, ", ") +
-				", upgrading the system with them",
+			Explain: "Install " + strings.Join(names, ", ") + " from the " +
+				RepoName + " repository, upgrading the system with them",
 		}}, nil
 	default:
 		return nil, unknownManager(manager)
@@ -232,15 +242,15 @@ func BuildCompanionRemove(manager pkgmgr.Manager,
 }
 
 // BuildCompanionUpgrade builds the steps that upgrade the named companion
-// packages, with the same Omarchy exception as BuildCompanionInstall
-// (pkgmgr.BuildUpgradeOn).
+// packages, with the same Omarchy exception and the same repository
+// qualification on pacman as BuildCompanionInstall (pkgmgr.BuildUpgradeOn).
 func BuildCompanionUpgrade(manager pkgmgr.Manager, distro pkgmgr.Distro,
 	names []string) ([]pkgmgr.Command, error) {
 	if err := CheckCompanionNames(names); err != nil {
 		return nil, err
 	}
 	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
-		return omarchyStep("Upgrade", names), nil
+		return omarchyStep("Upgrade", qualified(names)), nil
 	}
 	switch manager {
 	case pkgmgr.ManagerAPT:
@@ -263,9 +273,11 @@ func BuildCompanionUpgrade(manager pkgmgr.Manager, distro pkgmgr.Distro,
 		}}, nil
 	case pkgmgr.ManagerPacman:
 		return []pkgmgr.Command{{
-			Argv:       append([]string{"pacman", "-Syu", "--noconfirm"}, names...),
+			Argv: append([]string{"pacman", "-Syu", "--noconfirm"},
+				qualified(names)...),
 			Privileged: true,
-			Explain: "Upgrade " + strings.Join(names, ", ") +
+			Explain: "Upgrade " + strings.Join(names, ", ") + " from the " +
+				RepoName + " repository" +
 				" (pacman upgrades the machine with them: a partial upgrade " +
 				"is not supported on Arch)",
 		}}, nil
@@ -274,19 +286,31 @@ func BuildCompanionUpgrade(manager pkgmgr.Manager, distro pkgmgr.Distro,
 	}
 }
 
+// qualified names each package in the family repository, `tui-tools/<name>`,
+// which is how pacman is told where to take it from. The names have already
+// passed CheckCompanionNames, and RepoName is a constant, so the result is as
+// safe for an argv as the bare names were.
+func qualified(names []string) []string {
+	out := make([]string, len(names))
+	for i, name := range names {
+		out[i] = RepoName + "/" + name
+	}
+	return out
+}
+
 // omarchyStep is the one step an Omarchy install or upgrade is: the argv
 // pkgmgr.BuildInstallOmarchy and BuildUpgradeOmarchy build for a tool, with the
 // kit's own explanation of why it is not the -Syu the rest of the Arch family
 // gets. `-S --needed` both installs a missing package and brings an installed
 // one to the version the synced databases carry, so the verb is all that
 // differs between the two.
-func omarchyStep(verb string, names []string) []pkgmgr.Command {
+func omarchyStep(verb string, targets []string) []pkgmgr.Command {
 	return []pkgmgr.Command{{
 		Argv: append([]string{
 			"pacman", "-S", "--needed", "--noconfirm",
-		}, names...),
+		}, targets...),
 		Privileged: true,
-		Explain: verb + " " + strings.Join(names, ", ") + ". " +
+		Explain: verb + " " + strings.Join(targets, ", ") + ". " +
 			pkgmgr.OmarchyNote,
 	}}
 }

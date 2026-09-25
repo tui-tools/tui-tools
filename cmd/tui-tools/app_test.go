@@ -586,6 +586,11 @@ func TestOmarchyInstallsSayWhyTheyAreNotASystemUpgrade(t *testing.T) {
 			t.Fatalf("%s: i did not open the confirm dialog", row.Package)
 		}
 		want := "pacman -S --needed --noconfirm " + row.Package
+		if companion {
+			// A companion is named in the family repository, so pacman
+			// cannot take a distribution build of the same name instead.
+			want = "pacman -S --needed --noconfirm tui-tools/" + row.Package
+		}
 		if !strings.Contains(a.confirm.Command, want) ||
 			strings.Contains(a.confirm.Command, "-Syu") {
 			t.Errorf("%s: the preview is %q, want %q", row.Package,
@@ -648,5 +653,35 @@ func TestTheStatusLineCountsWhileASequenceRuns(t *testing.T) {
 	}
 	if got := a.shownStatus(); got != "Install "+row.Package+": done" {
 		t.Errorf("after the sequence the status is %q", got)
+	}
+}
+
+// A companion installed from another repository (the demo's headscale comes
+// from extra) is not updated from the family's: that update is a qualified
+// tui-tools/headscale, which would swap the build without the switch dialog.
+// u says so and points at o, and o still offers the switch.
+func TestUpdatingAForeignCompanionPointsAtTheSwitch(t *testing.T) {
+	a, backend := newTestApp(t)
+	row := selectCompanion(t, a, catalog.KindMirror)
+	if row.Origin.Family || row.Origin.Repo == "" {
+		t.Fatalf("the demo mirror is not installed from elsewhere: %+v", row.Origin)
+	}
+
+	press(t, a, "u")
+	if a.mode == modeConfirm {
+		t.Fatalf("u opened %q on a foreign companion", a.confirm.Command)
+	}
+	if !strings.Contains(a.status, "press o") {
+		t.Errorf("the refusal does not point at o: %q", a.status)
+	}
+	if len(backend.Ran) != 0 {
+		t.Errorf("something ran: %v", backend.Previews())
+	}
+
+	press(t, a, "o")
+	if a.mode != modeConfirm ||
+		!strings.Contains(a.confirm.Command, "tui-tools/"+row.Package) {
+		t.Errorf("o does not offer the switch: mode %v, %q", a.mode,
+			a.confirm.Command)
 	}
 }

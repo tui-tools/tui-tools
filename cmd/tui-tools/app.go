@@ -626,6 +626,15 @@ func refuse(what action, row catalog.Row) (string, bool) {
 		if row.Installed == "" {
 			return row.Package + " is not installed", true
 		}
+		// A companion whose copy came from another repository is not
+		// updated from the family's: the update names the package in the
+		// tui-tools repository, so it would replace the other build without
+		// the dialog that says so. That is what o is for.
+		if row.IsCompanion() && row.Origin.Repo != "" && !row.Origin.Family {
+			return row.Package + " is installed from " + originName(row.Origin) +
+				", which your system updates keep current; press o to switch " +
+				"it to the " + packages.RepoName + " build", true
+		}
 	case actionRemove:
 		if row.Installed == "" {
 			return row.Package + " is not installed", true
