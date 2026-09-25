@@ -578,23 +578,25 @@ func (a *app) confirmPackage(what action) tea.Cmd {
 
 // steps builds an action's command sequence for a row.
 //
-// A tool goes through tui-kit, which validates its name against ^tui-[a-z]+$
-// on the way. A companion cannot: its name is the upstream project's own, so
-// the same argv shapes are built by internal/packages, which holds it to the
-// companion pattern instead. Both end up as values the dialog previews and the
-// kit runner executes.
+// A tool goes through the backend, which validates its name against
+// ^tui-[a-z]+$ on the way. A companion cannot: its name is the upstream
+// project's own, so it goes through the kit's companion builders, which hold
+// it to the companion pattern instead. An install or upgrade names the family
+// repository (packages.CompanionTargets), which reaches pacman's argv. Both
+// end up as values the dialog previews and the kit runner executes.
 func (a *app) steps(what action, row catalog.Row) ([]pkgmgr.Command, error) {
 	names := []string{row.Package}
 	if row.IsCompanion() {
+		manager := a.backend.Manager()
 		switch what {
 		case actionInstall:
-			return packages.BuildCompanionInstall(a.backend.Manager(),
-				a.backend.Distro(), names)
+			return pkgmgr.BuildCompanionInstallOn(manager, a.backend.Distro(),
+				packages.CompanionTargets(names))
 		case actionUpgrade:
-			return packages.BuildCompanionUpgrade(a.backend.Manager(),
-				a.backend.Distro(), names)
+			return pkgmgr.BuildCompanionUpgradeOn(manager, a.backend.Distro(),
+				packages.CompanionTargets(names))
 		default:
-			return packages.BuildCompanionRemove(a.backend.Manager(), names)
+			return pkgmgr.BuildCompanionRemove(manager, names)
 		}
 	}
 	switch what {

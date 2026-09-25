@@ -2,7 +2,6 @@ package packages
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -15,14 +14,16 @@ import (
 // This file is the companion half of the backend: the family's packages that
 // are not terminal UIs.
 //
-// tui-kit/pkgmgr builds every command from a name it has held to ^tui-[a-z]+$,
-// which is exactly right for a tool — a tui-<word> package exists in no
-// repository but the family's — and wrong for a companion, whose name is the
-// upstream project's own ("headscale") or a tui-tools-<something> component.
-// So the argv shapes the kit already settled on are mirrored here, with the
-// companion name check in front of them, and nothing else changes: the commands
-// are still values, still previewed by the caller and still executed by the kit
-// runner, which remains the single place a process is started.
+// A companion's name is the upstream project's own ("headscale") or a
+// tui-tools-<something> component, so the ^tui-[a-z]+$ rule the kit holds a
+// tool to does not apply. The kit's companion builders cover them
+// (pkgmgr.CheckCompanionName, pkgmgr.BuildCompanionInstallOn and the rest):
+// the same argv shapes the tools get, behind a companion name check. What is
+// left here is what only this launcher does: switching a machine to the
+// family's build of an upstream project, and reading where an installed copy
+// came from. The commands are still values, still previewed by the caller and
+// still executed by the kit runner, which remains the single place a process
+// is started.
 
 // RepoName is the family repository's name in every manager's configuration.
 // It is what a mirror's package has to come from for the family's signing and
@@ -39,280 +40,20 @@ const RepoHost = "pkgs.tui.tools"
 const ProvenanceLine = "rebuilt from source under the family signing and " +
 	"provenance gate"
 
-// ErrInvalidCompanionName reports a name that is not one this launcher will
-// build a command from.
-var ErrInvalidCompanionName = errors.New(
-	"packages: not a companion package name")
-
-// companionName is the shape a companion package name may have, and it is the
-// same pattern internal/catalog holds the document to. A name reaching an argv
-// is checked twice on purpose: the catalog arrives over the network, and the
-// check that matters is the one closest to the command line.
-var companionName = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
-
-// maxCompanionName bounds a companion name.
-const maxCompanionName = 64
-
-// ValidCompanionName reports whether a name is one a command may carry.
-func ValidCompanionName(name string) bool {
-	return len(name) <= maxCompanionName && companionName.MatchString(name)
-}
-
-// CheckCompanionName rejects anything that is not a companion package name.
-func CheckCompanionName(name string) error {
-	if !ValidCompanionName(name) {
-		return fmt.Errorf("%w: %q", ErrInvalidCompanionName, name)
-	}
-	return nil
-}
-
-// CheckCompanionNames rejects an empty set and any name in it that is not a
-// companion package name. Every builder below starts here.
-func CheckCompanionNames(names []string) error {
-	if len(names) == 0 {
-		return errors.New("packages: no companion package named")
-	}
-	for _, name := range names {
-		if err := CheckCompanionName(name); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ---------------------------------------------------------------- reads ---
-
-// BuildCompanionInstalled asks the machine which of the named companion
-// packages are installed, and at which version. Every one of them is a local
-// database query: nothing is refreshed, nothing is downloaded, no privilege is
-// needed.
-func BuildCompanionInstalled(manager pkgmgr.Manager,
-	names []string) (pkgmgr.Command, error) {
-	if err := CheckCompanionNames(names); err != nil {
-		return pkgmgr.Command{}, err
-	}
-	switch manager {
-	case pkgmgr.ManagerAPT:
-		// dpkg also answers names it knows without them being installed (the
-		// Suggests: of an installed package, one removed but not purged), so
-		// the status comes along and parseVersions keeps only `installed`.
-		// The same format the kit's BuildInstalled asks for the tools.
-		return pkgmgr.Command{
-			Argv: append([]string{
-				"dpkg-query", "-W", "-f=${Package}|${Version}|${db:Status-Status}\n",
-			}, names...),
-			Explain: "Read the installed versions from the dpkg database",
-		}, nil
-	case pkgmgr.ManagerDNF:
-		return pkgmgr.Command{
-			Argv: append([]string{
-				"rpm", "-q", "--qf",
-				`%{NAME}|%|EPOCH?{%{EPOCH}:}|%{VERSION}-%{RELEASE}` + "\n",
-			}, names...),
-			Explain: "Read the installed versions from the rpm database",
-		}, nil
-	case pkgmgr.ManagerPacman:
-		return pkgmgr.Command{
-			Argv:    append([]string{"pacman", "-Q"}, names...),
-			Explain: "Read the installed versions from the pacman database",
-		}, nil
-	default:
-		return pkgmgr.Command{}, unknownManager(manager)
-	}
-}
-
-// BuildCompanionAvailable asks which version the repositories would install,
-// from the metadata already on disk.
-func BuildCompanionAvailable(manager pkgmgr.Manager,
-	names []string) (pkgmgr.Command, error) {
-	if err := CheckCompanionNames(names); err != nil {
-		return pkgmgr.Command{}, err
-	}
-	switch manager {
-	case pkgmgr.ManagerAPT:
-		return pkgmgr.Command{
-			Argv:    append([]string{"apt-cache", "policy"}, names...),
-			Explain: "Read the candidate versions from the apt lists on disk",
-		}, nil
-	case pkgmgr.ManagerDNF:
-		return pkgmgr.Command{
-			Argv: append([]string{
-				"dnf", "--quiet", "repoquery", "--latest-limit", "1",
-				"--qf", `%{name}|%{evr}` + "\n",
-			}, names...),
-			Explain: "Read the available versions from the dnf cache",
-		}, nil
-	case pkgmgr.ManagerPacman:
-		return pkgmgr.Command{
-			Argv:    append([]string{"pacman", "-Si"}, names...),
-			Explain: "Read the available versions from the pacman sync database",
-		}, nil
-	default:
-		return pkgmgr.Command{}, unknownManager(manager)
-	}
-}
-
-// -------------------------------------------------------------- mutations ---
-
-// BuildCompanionInstall builds the steps that install the named companion
-// packages, in the shapes tui-kit settled on for the family's own tools
-// (pkgmgr.BuildInstallOn): apt is given a refresh first, dnf refreshes an
-// expired cache itself, and pacman installs with `-Syu`, which is the only
-// form Arch supports. Omarchy is the exception: its guard hook refuses a direct
-// -Syu, so there the install is `-S --needed` against the databases the last
-// refresh synced (omarchyStep).
-//
-// On pacman every name is qualified with the family repository
-// (qualified): a mirror such as headscale is also in Arch's own repositories,
-// which pacman.conf lists before the family's, so a bare name would install
-// the distribution's build while the dialog promised the family's.
-// tui-tailscale installs headscale the same way. apt and dnf take the bare
-// name, which is also the family pattern there (tui-tailscale's install, the
-// kit's tools): neither Ubuntu nor Fedora ships a companion today, and a
-// dnf --repo would also hide the distribution's repositories from dependency
-// resolution.
-func BuildCompanionInstall(manager pkgmgr.Manager, distro pkgmgr.Distro,
-	names []string) ([]pkgmgr.Command, error) {
-	if err := CheckCompanionNames(names); err != nil {
-		return nil, err
-	}
-	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
-		return omarchyStep("Install", qualified(names)), nil
-	}
-	switch manager {
-	case pkgmgr.ManagerAPT:
-		refresh, err := pkgmgr.BuildRefresh(manager)
-		if err != nil {
-			return nil, err
-		}
-		return []pkgmgr.Command{refresh, {
-			Argv:       append([]string{"apt-get", "install", "-y"}, names...),
-			Privileged: true,
-			Explain:    "Install " + strings.Join(names, ", "),
-		}}, nil
-	case pkgmgr.ManagerDNF:
-		return []pkgmgr.Command{{
-			Argv:       append([]string{"dnf", "install", "-y"}, names...),
-			Privileged: true,
-			Explain:    "Install " + strings.Join(names, ", "),
-		}}, nil
-	case pkgmgr.ManagerPacman:
-		return []pkgmgr.Command{{
-			Argv: append([]string{
-				"pacman", "-Syu", "--needed", "--noconfirm",
-			}, qualified(names)...),
-			Privileged: true,
-			Explain: "Install " + strings.Join(names, ", ") + " from the " +
-				RepoName + " repository, upgrading the system with them",
-		}}, nil
-	default:
-		return nil, unknownManager(manager)
-	}
-}
-
-// BuildCompanionRemove builds the steps that take the named companion packages
-// off the machine. Nothing else goes with them: no autoremove is decided here.
-func BuildCompanionRemove(manager pkgmgr.Manager,
-	names []string) ([]pkgmgr.Command, error) {
-	if err := CheckCompanionNames(names); err != nil {
-		return nil, err
-	}
-	switch manager {
-	case pkgmgr.ManagerAPT:
-		return []pkgmgr.Command{{
-			Argv:       append([]string{"apt-get", "remove", "-y"}, names...),
-			Privileged: true,
-			Explain:    "Remove " + strings.Join(names, ", "),
-		}}, nil
-	case pkgmgr.ManagerDNF:
-		return []pkgmgr.Command{{
-			Argv:       append([]string{"dnf", "remove", "-y"}, names...),
-			Privileged: true,
-			Explain:    "Remove " + strings.Join(names, ", "),
-		}}, nil
-	case pkgmgr.ManagerPacman:
-		return []pkgmgr.Command{{
-			Argv:       append([]string{"pacman", "-R", "--noconfirm"}, names...),
-			Privileged: true,
-			Explain:    "Remove " + strings.Join(names, ", "),
-		}}, nil
-	default:
-		return nil, unknownManager(manager)
-	}
-}
-
-// BuildCompanionUpgrade builds the steps that upgrade the named companion
-// packages, with the same Omarchy exception and the same repository
-// qualification on pacman as BuildCompanionInstall (pkgmgr.BuildUpgradeOn).
-func BuildCompanionUpgrade(manager pkgmgr.Manager, distro pkgmgr.Distro,
-	names []string) ([]pkgmgr.Command, error) {
-	if err := CheckCompanionNames(names); err != nil {
-		return nil, err
-	}
-	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
-		return omarchyStep("Upgrade", qualified(names)), nil
-	}
-	switch manager {
-	case pkgmgr.ManagerAPT:
-		refresh, err := pkgmgr.BuildRefresh(manager)
-		if err != nil {
-			return nil, err
-		}
-		return []pkgmgr.Command{refresh, {
-			Argv: append([]string{
-				"apt-get", "install", "--only-upgrade", "-y",
-			}, names...),
-			Privileged: true,
-			Explain:    "Upgrade " + strings.Join(names, ", "),
-		}}, nil
-	case pkgmgr.ManagerDNF:
-		return []pkgmgr.Command{{
-			Argv:       append([]string{"dnf", "upgrade", "-y"}, names...),
-			Privileged: true,
-			Explain:    "Upgrade " + strings.Join(names, ", "),
-		}}, nil
-	case pkgmgr.ManagerPacman:
-		return []pkgmgr.Command{{
-			Argv: append([]string{"pacman", "-Syu", "--noconfirm"},
-				qualified(names)...),
-			Privileged: true,
-			Explain: "Upgrade " + strings.Join(names, ", ") + " from the " +
-				RepoName + " repository" +
-				" (pacman upgrades the machine with them: a partial upgrade " +
-				"is not supported on Arch)",
-		}}, nil
-	default:
-		return nil, unknownManager(manager)
-	}
-}
-
-// qualified names each package in the family repository, `tui-tools/<name>`,
-// which is how pacman is told where to take it from. The names have already
-// passed CheckCompanionNames, and RepoName is a constant, so the result is as
-// safe for an argv as the bare names were.
-func qualified(names []string) []string {
+// CompanionTargets names each companion in the family repository,
+// `tui-tools/<name>`, which is the target form the kit's install and upgrade
+// builders take. pacman gets it as written: a mirror such as headscale is also
+// in Arch's own repositories, which pacman.conf lists before the family's, so
+// a bare name would install the distribution's build while the dialog
+// promised the family's. apt and dnf get the bare name from the kit (apt would
+// read the qualifier as a release, and a dnf --repo would hide the
+// distribution's repositories from dependency resolution).
+func CompanionTargets(names []string) []string {
 	out := make([]string, len(names))
 	for i, name := range names {
 		out[i] = RepoName + "/" + name
 	}
 	return out
-}
-
-// omarchyStep is the one step an Omarchy install or upgrade is: the argv
-// pkgmgr.BuildInstallOmarchy and BuildUpgradeOmarchy build for a tool, with the
-// kit's own explanation of why it is not the -Syu the rest of the Arch family
-// gets. `-S --needed` both installs a missing package and brings an installed
-// one to the version the synced databases carry, so the verb is all that
-// differs between the two.
-func omarchyStep(verb string, targets []string) []pkgmgr.Command {
-	return []pkgmgr.Command{{
-		Argv: append([]string{
-			"pacman", "-S", "--needed", "--noconfirm",
-		}, targets...),
-		Privileged: true,
-		Explain: verb + " " + strings.Join(targets, ", ") + ". " +
-			pkgmgr.OmarchyNote,
-	}}
 }
 
 // BuildCompanionSwitch builds the steps that replace an installed package with
@@ -325,7 +66,7 @@ func omarchyStep(verb string, targets []string) []pkgmgr.Command {
 // wrote. pacman and dnf can name the repository directly.
 func BuildCompanionSwitch(manager pkgmgr.Manager, name string,
 	origin catalog.Origin) ([]pkgmgr.Command, error) {
-	if err := CheckCompanionName(name); err != nil {
+	if err := pkgmgr.CheckCompanionName(name); err != nil {
 		return nil, err
 	}
 	if !origin.Offered {
@@ -348,6 +89,10 @@ func BuildCompanionSwitch(manager pkgmgr.Manager, name string,
 				"apt-get", "install", "-y", "--allow-downgrades",
 				name + "=" + origin.Version,
 			},
+			// The same noninteractive environment as every other apt
+			// mutation (pkgmgr.APTEnv): no debconf or needrestart prompt can
+			// wait behind the TUI.
+			Env:        pkgmgr.APTEnv(),
 			Privileged: true,
 			Explain: "Install the " + RepoName + " build of " + name +
 				", version " + origin.Version,
@@ -401,7 +146,7 @@ func unknownManager(manager pkgmgr.Manager) error {
 // in an inference rather than a fact; parsePacmanOrigins says how.
 func BuildOriginProbes(manager pkgmgr.Manager,
 	names []string) ([]pkgmgr.Command, error) {
-	if err := CheckCompanionNames(names); err != nil {
+	if err := pkgmgr.CheckCompanionNames(names); err != nil {
 		return nil, err
 	}
 	switch manager {
@@ -740,7 +485,7 @@ func pacmanVersions(out string) map[string]string {
 // pacmanFamilyVersions reads `pacman -Si` and keeps the version the family
 // repository offers for each package, which is the version an install or an
 // upgrade from this launcher fetches: on pacman those name every companion as
-// tui-tools/<name> (BuildCompanionInstall).
+// tui-tools/<name> (CompanionTargets).
 //
 // The kit's own reader keeps the last block, and for a tool that is the same
 // answer: a tui-<word> package exists in one repository. A companion carries
@@ -839,11 +584,11 @@ func CompanionVersions(ctx context.Context, backend Backend,
 	if len(names) == 0 {
 		return installed, available
 	}
-	if cmd, err := BuildCompanionInstalled(manager, names); err == nil {
+	if cmd, err := pkgmgr.BuildCompanionInstalled(manager, names); err == nil {
 		out, _ := backend.Run(ctx, cmd)
 		installed = parseVersions(manager, out, false)
 	}
-	if cmd, err := BuildCompanionAvailable(manager, names); err == nil {
+	if cmd, err := pkgmgr.BuildCompanionAvailable(manager, names); err == nil {
 		out, _ := backend.Run(ctx, cmd)
 		available = parseVersions(manager, out, true)
 	}

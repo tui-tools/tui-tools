@@ -171,7 +171,7 @@ Upgrades then arrive with the rest of your system updates.
 ### Any distribution, static binary
 
 ```sh
-curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.3.0/tui-tools_0.3.0_linux_amd64.tar.gz | tar -xz tui-tools
+curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.3.1/tui-tools_0.3.1_linux_amd64.tar.gz | tar -xz tui-tools
 sudo install -m0755 tui-tools /usr/local/bin/tui-tools
 ```
 
