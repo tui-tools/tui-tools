@@ -3,7 +3,11 @@
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/tui-tools/tui-tools/badge)](https://scorecard.dev/viewer/?uri=github.com/tui-tools/tui-tools)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14368/badge)](https://www.bestpractices.dev/projects/14368)
 
-> **Beta.** The family is days old and still changing. Package names, flags and keys may move without notice until 1.0. Pin versions, and report what breaks.
+<!-- stability:start -->
+> **Beta.** The family is days old and still changing. Package names, flags
+> and keys may move without notice until 1.0. Pin versions, and report what
+> breaks.
+<!-- stability:end -->
 
 The launcher of the [tui-tools](https://tui.tools) family. Every tool of the
 family is a card: what it does, whether this machine has it, which version, and
@@ -167,7 +171,7 @@ Upgrades then arrive with the rest of your system updates.
 ### Any distribution, static binary
 
 ```sh
-curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.2.2/tui-tools_0.2.2_linux_amd64.tar.gz | tar -xz tui-tools
+curl -fsSL https://github.com/tui-tools/tui-tools/releases/download/v0.3.0/tui-tools_0.3.0_linux_amd64.tar.gz | tar -xz tui-tools
 sudo install -m0755 tui-tools /usr/local/bin/tui-tools
 ```
 
@@ -271,6 +275,16 @@ They install, update and remove exactly like a tool, through the same preview
 and the same confirmation. `enter` does not launch one, because there is nothing
 to launch: it opens the full status instead, which is where the versions, the
 upstream tag and the provenance line are.
+
+A mirror is often in the distribution's own repositories too, and pacman.conf
+lists those before the family's, so on `pacman` a companion is always named in
+the family repository: `pacman -Syu --needed --noconfirm tui-tools/headscale` on
+Arch, `pacman -S --needed --noconfirm tui-tools/headscale` on Omarchy. A bare
+name would install the distribution's build while the dialog promised the
+family's. `apt` and `dnf` take the bare name, as every tool of the family does
+there: neither Ubuntu nor Fedora ships a companion today. A companion whose copy
+came from another repository is not updated by `u`, which would swap the build
+without saying so; `o` is the one path to the family's build.
 
 ![The companions](docs/screenshots/tui-tools-companions.png)
 
@@ -419,7 +433,11 @@ first:
 - **update** one. On `pacman` that is `-Syu` with the tool named, because Arch
   has no supported way to upgrade one package against a refreshed database
   without upgrading the machine with it, and pretending otherwise is how a
-  partial upgrade breaks a system. The dialog says so before it runs;
+  partial upgrade breaks a system. The dialog says so before it runs.
+  Omarchy is the exception: its pacman hook refuses a direct `-Syu` that does
+  not come from `omarchy update`, so there an install or an update is
+  `pacman -S --needed` against the databases the last refresh synced, and the
+  dialog says that instead;
 - **remove** one. Nothing else goes with it: the dependencies it pulled in are
   left alone, because an autoremove decided by a launcher is how an unrelated
   package disappears;
@@ -428,6 +446,11 @@ first:
   for: the family's build is rebuilt from source under the family signing and
   provenance gate, and the copy that is here is not;
 - **set the repository up**, with the signing key pinned by fingerprint.
+
+While a sequence runs, the status line says what is running and for how long
+(`Install tui-cert: running… 1m05s`), refreshed every second, so a download
+that takes minutes does not look like a frozen screen. A sequence is given up
+to 30 minutes, so a slow mirror is waited for.
 
 Reading takes no privileges at all. Which tools are installed and which the
 repositories offer are local database queries any user may make, and none of
@@ -507,11 +530,11 @@ hidden; one below the minimum is marked as such and the tool still runs.
 | Binary | `pacman` |
 | Version read with | `pacman --version` |
 | Minimum | 6.0 |
-| Tested | none yet |
+| Tested | `7.1.0` |
 
 | Versions | What changes |
 | --- | --- |
-| `>=6.0` | Arch has no supported way to upgrade one package against a refreshed database without upgrading the machine with it, so an update here is `pacman -Syu` with the tool named, and the confirm dialog says so before it runs |
+| `>=6.0` | Arch has no supported partial upgrade, so an update is `pacman -Syu` with the tool named, and the dialog says so. Omarchy's pacman hook refuses a direct -Syu, so there it is `pacman -S --needed` instead, and the dialog says why |
 | `>=6.0` | the repository setup writes a `[tui-tools]` section under /etc/pacman.d and adds one Include line to pacman.conf, so a later setup finds it again instead of appending a second block |
 | `>=6.0` | pacman records no repository for an installed package, so a companion's origin is inferred rather than read: a bare `[installed]` in `pacman -Sl tui-tools` means the machine has the version that repository offers, and `pacman -Si` names the repository whose version matches the installed one |
 

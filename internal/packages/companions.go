@@ -155,13 +155,29 @@ func BuildCompanionAvailable(manager pkgmgr.Manager,
 // -------------------------------------------------------------- mutations ---
 
 // BuildCompanionInstall builds the steps that install the named companion
-// packages, in the shapes tui-kit settled on for the family's own tools: apt is
-// given a refresh first, dnf refreshes an expired cache itself, and pacman
-// installs with `-Syu`, which is the only form Arch supports.
-func BuildCompanionInstall(manager pkgmgr.Manager,
+// packages, in the shapes tui-kit settled on for the family's own tools
+// (pkgmgr.BuildInstallOn): apt is given a refresh first, dnf refreshes an
+// expired cache itself, and pacman installs with `-Syu`, which is the only
+// form Arch supports. Omarchy is the exception: its guard hook refuses a direct
+// -Syu, so there the install is `-S --needed` against the databases the last
+// refresh synced (omarchyStep).
+//
+// On pacman every name is qualified with the family repository
+// (qualified): a mirror such as headscale is also in Arch's own repositories,
+// which pacman.conf lists before the family's, so a bare name would install
+// the distribution's build while the dialog promised the family's.
+// tui-tailscale installs headscale the same way. apt and dnf take the bare
+// name, which is also the family pattern there (tui-tailscale's install, the
+// kit's tools): neither Ubuntu nor Fedora ships a companion today, and a
+// dnf --repo would also hide the distribution's repositories from dependency
+// resolution.
+func BuildCompanionInstall(manager pkgmgr.Manager, distro pkgmgr.Distro,
 	names []string) ([]pkgmgr.Command, error) {
 	if err := CheckCompanionNames(names); err != nil {
 		return nil, err
+	}
+	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
+		return omarchyStep("Install", qualified(names)), nil
 	}
 	switch manager {
 	case pkgmgr.ManagerAPT:
@@ -184,10 +200,10 @@ func BuildCompanionInstall(manager pkgmgr.Manager,
 		return []pkgmgr.Command{{
 			Argv: append([]string{
 				"pacman", "-Syu", "--needed", "--noconfirm",
-			}, names...),
+			}, qualified(names)...),
 			Privileged: true,
-			Explain: "Install " + strings.Join(names, ", ") +
-				", upgrading the system with them",
+			Explain: "Install " + strings.Join(names, ", ") + " from the " +
+				RepoName + " repository, upgrading the system with them",
 		}}, nil
 	default:
 		return nil, unknownManager(manager)
@@ -226,11 +242,15 @@ func BuildCompanionRemove(manager pkgmgr.Manager,
 }
 
 // BuildCompanionUpgrade builds the steps that upgrade the named companion
-// packages.
-func BuildCompanionUpgrade(manager pkgmgr.Manager,
+// packages, with the same Omarchy exception and the same repository
+// qualification on pacman as BuildCompanionInstall (pkgmgr.BuildUpgradeOn).
+func BuildCompanionUpgrade(manager pkgmgr.Manager, distro pkgmgr.Distro,
 	names []string) ([]pkgmgr.Command, error) {
 	if err := CheckCompanionNames(names); err != nil {
 		return nil, err
+	}
+	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
+		return omarchyStep("Upgrade", qualified(names)), nil
 	}
 	switch manager {
 	case pkgmgr.ManagerAPT:
@@ -253,15 +273,46 @@ func BuildCompanionUpgrade(manager pkgmgr.Manager,
 		}}, nil
 	case pkgmgr.ManagerPacman:
 		return []pkgmgr.Command{{
-			Argv:       append([]string{"pacman", "-Syu", "--noconfirm"}, names...),
+			Argv: append([]string{"pacman", "-Syu", "--noconfirm"},
+				qualified(names)...),
 			Privileged: true,
-			Explain: "Upgrade " + strings.Join(names, ", ") +
+			Explain: "Upgrade " + strings.Join(names, ", ") + " from the " +
+				RepoName + " repository" +
 				" (pacman upgrades the machine with them: a partial upgrade " +
 				"is not supported on Arch)",
 		}}, nil
 	default:
 		return nil, unknownManager(manager)
 	}
+}
+
+// qualified names each package in the family repository, `tui-tools/<name>`,
+// which is how pacman is told where to take it from. The names have already
+// passed CheckCompanionNames, and RepoName is a constant, so the result is as
+// safe for an argv as the bare names were.
+func qualified(names []string) []string {
+	out := make([]string, len(names))
+	for i, name := range names {
+		out[i] = RepoName + "/" + name
+	}
+	return out
+}
+
+// omarchyStep is the one step an Omarchy install or upgrade is: the argv
+// pkgmgr.BuildInstallOmarchy and BuildUpgradeOmarchy build for a tool, with the
+// kit's own explanation of why it is not the -Syu the rest of the Arch family
+// gets. `-S --needed` both installs a missing package and brings an installed
+// one to the version the synced databases carry, so the verb is all that
+// differs between the two.
+func omarchyStep(verb string, targets []string) []pkgmgr.Command {
+	return []pkgmgr.Command{{
+		Argv: append([]string{
+			"pacman", "-S", "--needed", "--noconfirm",
+		}, targets...),
+		Privileged: true,
+		Explain: verb + " " + strings.Join(targets, ", ") + ". " +
+			pkgmgr.OmarchyNote,
+	}}
 }
 
 // BuildCompanionSwitch builds the steps that replace an installed package with
@@ -686,23 +737,22 @@ func pacmanVersions(out string) map[string]string {
 	return versions
 }
 
-// pacmanSyncFirst reads `pacman -Si` and keeps the first version each package
-// is offered at, which is the version an install would actually fetch.
+// pacmanFamilyVersions reads `pacman -Si` and keeps the version the family
+// repository offers for each package, which is the version an install or an
+// upgrade from this launcher fetches: on pacman those name every companion as
+// tui-tools/<name> (BuildCompanionInstall).
 //
-// The kit's own reader keeps the last, and for a tool the two are the same
-// answer: a tui-<word> package exists in one repository and the output has one
-// block. A companion carries the upstream project's name, so several
-// repositories can offer it and the output has a block for each — in the order
-// they appear in pacman.conf, which is the order `pacman -S` resolves a bare
-// name in. First is therefore the one that would be installed.
-func pacmanSyncFirst(out string) map[string]string {
+// The kit's own reader keeps the last block, and for a tool that is the same
+// answer: a tui-<word> package exists in one repository. A companion carries
+// the upstream project's name, so several repositories can offer it, and the
+// distribution's come first in pacman.conf. Neither first nor last is the
+// answer then; the block whose Repository is the family's is. A companion the
+// family repository does not carry has no available version, which is true:
+// nothing this launcher builds could install it.
+func pacmanFamilyVersions(out string) map[string]string {
 	versions := map[string]string{}
-	for _, block := range pacmanBlocks(out) {
-		name, version := block["Name"], block["Version"]
-		if name == "" || version == "" {
-			continue
-		}
-		if _, seen := versions[name]; !seen {
+	for name, repos := range pacmanRepoVersions(out) {
+		if version, ok := repos[RepoName]; ok {
 			versions[name] = version
 		}
 	}
@@ -805,7 +855,7 @@ func parseVersions(manager pkgmgr.Manager, out string, sync bool) map[string]str
 	switch manager {
 	case pkgmgr.ManagerPacman:
 		if sync {
-			return pacmanSyncFirst(out)
+			return pacmanFamilyVersions(out)
 		}
 		return pkgmgr.ParsePacmanQuery(out)
 	case pkgmgr.ManagerAPT:

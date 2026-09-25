@@ -39,13 +39,13 @@ func TestCompanionBuildersRefuseANameThatIsNotOne(t *testing.T) {
 	bad := []string{"headscale; rm -rf /"}
 	for _, manager := range []pkgmgr.Manager{
 		pkgmgr.ManagerAPT, pkgmgr.ManagerDNF, pkgmgr.ManagerPacman} {
-		if _, err := BuildCompanionInstall(manager, bad); err == nil {
+		if _, err := BuildCompanionInstall(manager, pkgmgr.Distro{}, bad); err == nil {
 			t.Errorf("%s: install accepted %q", manager, bad[0])
 		}
 		if _, err := BuildCompanionRemove(manager, bad); err == nil {
 			t.Errorf("%s: remove accepted %q", manager, bad[0])
 		}
-		if _, err := BuildCompanionUpgrade(manager, bad); err == nil {
+		if _, err := BuildCompanionUpgrade(manager, pkgmgr.Distro{}, bad); err == nil {
 			t.Errorf("%s: upgrade accepted %q", manager, bad[0])
 		}
 		if _, err := BuildCompanionInstalled(manager, bad); err == nil {
@@ -316,14 +316,23 @@ func TestSwitchRefusesWhatItCannotName(t *testing.T) {
 	}
 }
 
-// Several repositories can offer the same companion, and `pacman -S` takes the
-// first one pacman.conf lists. The available version has to be that one, or a
-// row claims an update the machine would not get.
+// Several repositories can offer the same companion, and a bare `pacman -S`
+// takes the first one pacman.conf lists, which is the distribution's. The
+// launcher's install and upgrade name tui-tools/<name>, so the available
+// version has to be the family repository's, or a row claims an update the
+// machine would not get (the lab's Omarchy guest showed a family headscale as
+// "update available" to extra's newer build). A package the family repository
+// does not carry has no available version at all.
 func TestPacmanAvailableIsTheVersionAnInstallWouldFetch(t *testing.T) {
 	got := parseVersions(pkgmgr.ManagerPacman, pacmanSync, true)
-	if got["headscale"] != "0.25.1-1" {
-		t.Errorf("available = %q, want the first repository's %q",
-			got["headscale"], "0.25.1-1")
+	if got["headscale"] != "0.26.1-1" {
+		t.Errorf("available = %q, want the family repository's %q",
+			got["headscale"], "0.26.1-1")
+	}
+	only := parseVersions(pkgmgr.ManagerPacman,
+		"Repository      : extra\nName            : caddy\nVersion         : 2.9.1-1\n", true)
+	if v, ok := only["caddy"]; ok {
+		t.Errorf("a package only extra carries is available at %q", v)
 	}
 }
 
@@ -410,10 +419,10 @@ func TestDemoCompanionsGoThroughTheRealParsers(t *testing.T) {
 		t.Errorf("a component nobody installed is installed: %v", installed)
 	}
 	// The demo machine has the family repository last in pacman.conf, as a real
-	// one does, so what a bare install would fetch is the distribution's build
-	// and that is what "available" says. What the family offers is a separate
-	// answer, and it is in the origin.
-	if available["headscale"] != "0.25.1-1" ||
+	// one does, so a bare install would fetch the distribution's build. The
+	// launcher's install names the family repository, so "available" is what
+	// the family offers, whatever pacman.conf lists first.
+	if available["headscale"] != "0.26.1-1" ||
 		available["tui-tools-example"] != "0.1.0-1" {
 		t.Errorf("available = %v", available)
 	}
@@ -469,7 +478,7 @@ func TestDemoInstallsAndRemovesACompanion(t *testing.T) {
 	machine := demoMachine()
 	ctx := context.Background()
 
-	steps, err := BuildCompanionInstall(machine.Manager(),
+	steps, err := BuildCompanionInstall(machine.Manager(), machine.Distro(),
 		[]string{"tui-tools-example"})
 	if err != nil {
 		t.Fatalf("BuildCompanionInstall: %v", err)
@@ -497,5 +506,163 @@ func TestDemoInstallsAndRemovesACompanion(t *testing.T) {
 	installed, _ = CompanionVersions(ctx, machine, []string{"tui-tools-example"})
 	if installed["tui-tools-example"] != "" {
 		t.Errorf("after the removal the machine still has %v", installed)
+	}
+}
+
+// Omarchy refuses a direct -Syu (its pacman guard hook aborts one that does not
+// come from `omarchy update`), so a companion there is installed and upgraded
+// with `-S --needed`, exactly as tui-kit does for a tool. Plain Arch keeps the
+// -Syu it supports, and the other managers do not care about the distribution.
+func TestCompanionInstallAndUpgradeOnOmarchy(t *testing.T) {
+	names := []string{"headscale"}
+	omarchy := []pkgmgr.Distro{
+		{ID: "omarchy-server", Like: []string{"omarchy", "arch"}},
+		{ID: "omarchy", Like: []string{"arch"}},
+		// An Omarchy installed on top of an Arch keeps ID=arch; the guard
+		// hook is what gives it away.
+		{ID: "arch", UpdateGuard: true},
+	}
+	builders := map[string]func(pkgmgr.Manager, pkgmgr.Distro,
+		[]string) ([]pkgmgr.Command, error){
+		"Install": BuildCompanionInstall,
+		"Upgrade": BuildCompanionUpgrade,
+	}
+	for verb, build := range builders {
+		for _, distro := range omarchy {
+			steps, err := build(pkgmgr.ManagerPacman, distro, names)
+			if err != nil {
+				t.Fatalf("%s on %+v: %v", verb, distro, err)
+			}
+			want := "pacman -S --needed --noconfirm tui-tools/headscale"
+			if len(steps) != 1 || strings.Join(steps[0].Argv, " ") != want {
+				t.Errorf("%s on %+v = %v, want the one step %q",
+					verb, distro, steps, want)
+				continue
+			}
+			if !steps[0].Privileged {
+				t.Errorf("%s on %+v is not privileged", verb, distro)
+			}
+			if !strings.HasPrefix(steps[0].Explain, verb+" tui-tools/headscale. ") ||
+				!strings.Contains(steps[0].Explain, pkgmgr.OmarchyNote) {
+				t.Errorf("%s on %+v explains %q", verb, distro, steps[0].Explain)
+			}
+		}
+
+		// Plain Arch: the -Syu Arch supports, never a partial upgrade.
+		steps, err := build(pkgmgr.ManagerPacman,
+			pkgmgr.Distro{ID: "arch"}, names)
+		if err != nil {
+			t.Fatalf("%s on arch: %v", verb, err)
+		}
+		wantArch := map[string]string{
+			"Install": "pacman -Syu --needed --noconfirm tui-tools/headscale",
+			"Upgrade": "pacman -Syu --noconfirm tui-tools/headscale",
+		}[verb]
+		if len(steps) != 1 || strings.Join(steps[0].Argv, " ") != wantArch {
+			t.Errorf("%s on arch = %v, want %q", verb, steps, wantArch)
+		}
+		if strings.Contains(steps[0].Explain, "omarchy") {
+			t.Errorf("%s on arch mentions Omarchy: %q", verb, steps[0].Explain)
+		}
+
+		// A distribution that is Omarchy but not on pacman changes nothing:
+		// the exception is the pacman guard, not the name.
+		apt, err := build(pkgmgr.ManagerAPT,
+			pkgmgr.Distro{ID: "omarchy"}, names)
+		if err != nil {
+			t.Fatalf("%s apt: %v", verb, err)
+		}
+		// apt and dnf take the bare name: that is the family pattern there,
+		// and neither Ubuntu nor Fedora ships a companion to lose against.
+		last := apt[len(apt)-1].Argv
+		if last[0] != "apt-get" || last[len(last)-1] != "headscale" {
+			t.Errorf("%s apt = %v", verb, apt)
+		}
+		dnf, err := build(pkgmgr.ManagerDNF, pkgmgr.Distro{ID: "fedora"}, names)
+		if err != nil {
+			t.Fatalf("%s dnf: %v", verb, err)
+		}
+		if last := dnf[len(dnf)-1].Argv; last[len(last)-1] != "headscale" {
+			t.Errorf("%s dnf = %v", verb, dnf)
+		}
+	}
+}
+
+// On an Omarchy demo machine the companion install goes through the bare -S,
+// and the demo moves the machine the way that command would.
+func TestDemoInstallsACompanionOnOmarchy(t *testing.T) {
+	machine := demoMachine()
+	machine.Machine = pkgmgr.Distro{ID: "omarchy", Like: []string{"arch"}}
+	ctx := context.Background()
+
+	steps, err := BuildCompanionInstall(machine.Manager(), machine.Distro(),
+		[]string{"tui-tools-example"})
+	if err != nil {
+		t.Fatalf("BuildCompanionInstall: %v", err)
+	}
+	if steps[0].Argv[1] != "-S" ||
+		steps[0].Argv[len(steps[0].Argv)-1] != "tui-tools/tui-tools-example" {
+		t.Fatalf("the Omarchy install is %q", steps[0].String())
+	}
+	for _, step := range steps {
+		if _, err := machine.Run(ctx, step); err != nil {
+			t.Fatalf("%s: %v", step.String(), err)
+		}
+	}
+	installed, _ := CompanionVersions(ctx, machine, []string{"tui-tools-example"})
+	if installed["tui-tools-example"] != "0.1.0-1" {
+		t.Errorf("after the install the machine has %v", installed)
+	}
+	origin := CompanionOrigins(ctx, machine,
+		[]string{"tui-tools-example"})["tui-tools-example"]
+	if !origin.Family {
+		t.Errorf("the component did not come from the family repository: %+v",
+			origin)
+	}
+}
+
+// A mirror is also in the distribution's own repositories, which pacman.conf
+// lists before the family's. A bare `pacman -S headscale` takes the
+// distribution's build; the launcher's qualified `tui-tools/headscale` takes the
+// family's, which is what its dialog promised. The demo resolves both the way
+// pacman does, so this holds on the demo machine exactly as on a real one.
+func TestTheQualifiedInstallTakesTheFamilyBuildOverTheDistribution(t *testing.T) {
+	for _, distro := range []pkgmgr.Distro{
+		{ID: "omarchy", Like: []string{"arch"}}, {ID: "arch"}} {
+		machine := demoMachine()
+		machine.Machine = distro
+		ctx := context.Background()
+		// headscale as a fresh machine sees it: not installed, carried by
+		// extra (listed first) and by the family repository.
+		machine.Companions["headscale"] = FakeCompanion{
+			Offered: "0.26.1-1", From: "extra", OtherVersion: "0.25.1-1",
+		}
+
+		// What a bare name would do: the distribution's build.
+		if _, err := machine.Run(ctx, pkgmgr.Command{
+			Argv: []string{"pacman", "-S", "--needed", "--noconfirm", "headscale"},
+		}); err != nil {
+			t.Fatalf("bare -S: %v", err)
+		}
+		if got := machine.Companions["headscale"]; got.From != "extra" {
+			t.Fatalf("%s: a bare -S took %+v, want the extra build", distro.ID, got)
+		}
+
+		steps, err := BuildCompanionInstall(machine.Manager(), distro,
+			[]string{"headscale"})
+		if err != nil {
+			t.Fatalf("%s: %v", distro.ID, err)
+		}
+		for _, step := range steps {
+			if _, err := machine.Run(ctx, step); err != nil {
+				t.Fatalf("%s: %s: %v", distro.ID, step.String(), err)
+			}
+		}
+		origin := CompanionOrigins(ctx, machine, []string{"headscale"})["headscale"]
+		installed, _ := CompanionVersions(ctx, machine, []string{"headscale"})
+		if !origin.Family || installed["headscale"] != "0.26.1-1" {
+			t.Errorf("%s: after the launcher's install headscale is %s from %+v",
+				distro.ID, installed["headscale"], origin)
+		}
 	}
 }

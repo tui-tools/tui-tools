@@ -113,7 +113,7 @@ func (a *app) detailView() string {
 		{Key: "o", Desc: "switch to the family build"},
 		{Key: "esc", Desc: "back to the dashboard"},
 	}, a.width)
-	status := ui.StatusLine(t, a.statusKind, a.status,
+	status := ui.StatusLine(t, a.shownKind(), a.shownStatus(),
 		"any key returns to the dashboard", a.width)
 	return strings.Join([]string{
 		header, strings.Join(body[:height], "\n"), help, status}, "\n")
@@ -146,7 +146,7 @@ func (a *app) listView() string {
 	}
 	bands = append(bands,
 		ui.HelpBar(a.theme, shortHelpKeys(), a.width),
-		ui.StatusLine(a.theme, a.statusKind, a.status, a.defaultStatus(), a.width))
+		ui.StatusLine(a.theme, a.shownKind(), a.shownStatus(), a.defaultStatus(), a.width))
 	return strings.Join(bands, "\n")
 }
 
@@ -541,7 +541,7 @@ func (a *app) outputView() string {
 		{Key: "↑/k, ↓/j", Desc: "scroll"},
 		{Key: "esc", Desc: "back to the dashboard"},
 	}, a.width)
-	status := ui.StatusLine(t, a.statusKind, a.status, "esc returns to the dashboard", a.width)
+	status := ui.StatusLine(t, a.shownKind(), a.shownStatus(), "esc returns to the dashboard", a.width)
 	return strings.Join([]string{header, strings.Join(body, "\n"), help, status}, "\n")
 }
 

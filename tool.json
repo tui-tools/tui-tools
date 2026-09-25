@@ -96,7 +96,7 @@
       "notes": [
         {
           "range": ">=6.0",
-          "impact": "Arch has no supported way to upgrade one package against a refreshed database without upgrading the machine with it, so an update here is `pacman -Syu` with the tool named, and the confirm dialog says so before it runs"
+          "impact": "Arch has no supported partial upgrade, so an update is `pacman -Syu` with the tool named, and the dialog says so. Omarchy's pacman hook refuses a direct -Syu, so there it is `pacman -S --needed` instead, and the dialog says why"
         },
         {
           "range": ">=6.0",
@@ -107,7 +107,9 @@
           "impact": "pacman records no repository for an installed package, so a companion's origin is inferred rather than read: a bare `[installed]` in `pacman -Sl tui-tools` means the machine has the version that repository offers, and `pacman -Si` names the repository whose version matches the installed one"
         }
       ],
-      "tested": []
+      "tested": [
+        "7.1.0"
+      ]
     },
     {
       "name": "apt",

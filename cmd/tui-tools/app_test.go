@@ -4,10 +4,12 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/tui-tools/tui-kit/pkgmgr"
 	"github.com/tui-tools/tui-kit/theme"
+	"github.com/tui-tools/tui-kit/ui"
 	"github.com/tui-tools/tui-tools/internal/catalog"
 	"github.com/tui-tools/tui-tools/internal/packages"
 )
@@ -63,6 +65,42 @@ func press(t *testing.T, a *app, key string) tea.Cmd {
 	return cmd
 }
 
+// ranOf runs what confirming a dialog returned and hands back the sequence's
+// result. Confirming batches the sequence with the running indicator's tick,
+// which fires only after a second, so every command of the batch is started at
+// once and the first ranMsg to arrive is the answer; the tick is left to fire
+// into nothing.
+func ranOf(t *testing.T, cmd tea.Cmd) (ranMsg, bool) {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("confirming ran nothing")
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		ran, ok := msg.(ranMsg)
+		return ran, ok
+	}
+	results := make(chan tea.Msg, len(batch))
+	for _, c := range batch {
+		if c == nil {
+			continue
+		}
+		go func(c tea.Cmd) { results <- c() }(c)
+	}
+	for range batch {
+		select {
+		case msg := <-results:
+			if ran, ok := msg.(ranMsg); ok {
+				return ran, true
+			}
+		case <-time.After(10 * time.Second):
+			return ranMsg{}, false
+		}
+	}
+	return ranMsg{}, false
+}
+
 // selectRow puts the cursor on the tool with a package name.
 func selectRow(t *testing.T, a *app, pkg string) {
 	t.Helper()
@@ -105,7 +143,7 @@ func TestInstallRunsExactlyTheCommandsThePreviewShowed(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("confirming ran nothing")
 	}
-	msg, ok := cmd().(ranMsg)
+	msg, ok := ranOf(t, cmd)
 	if !ok {
 		t.Fatalf("confirming produced %T, want a ranMsg", msg)
 	}
@@ -210,7 +248,7 @@ func TestRepoSetupImportsAKeyThatMatchesTheFingerprint(t *testing.T) {
 	}
 
 	cmd := press(t, a, "y")
-	msg, ok := cmd().(ranMsg)
+	msg, ok := ranOf(t, cmd)
 	if !ok {
 		t.Fatalf("confirming produced %T, want a ranMsg", msg)
 	}
@@ -246,7 +284,7 @@ func TestRepoSetupStopsWhenTheKeyIsNotTheOnePinned(t *testing.T) {
 
 	press(t, a, "s")
 	cmd := press(t, a, "y")
-	msg, ok := cmd().(ranMsg)
+	msg, ok := ranOf(t, cmd)
 	if !ok {
 		t.Fatalf("confirming produced %T, want a ranMsg", msg)
 	}
@@ -435,7 +473,7 @@ func TestSwitchPreviewsAndRunsTheSameCommand(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("confirming the switch ran nothing")
 	}
-	msg, ok := cmd().(ranMsg)
+	msg, ok := ranOf(t, cmd)
 	if !ok {
 		t.Fatalf("confirming produced %T, want a ranMsg", msg)
 	}
@@ -488,7 +526,7 @@ func TestInstallingACompanionIsPreviewedAndConfirmed(t *testing.T) {
 	}
 
 	cmd := press(t, a, "y")
-	msg, ok := cmd().(ranMsg)
+	msg, ok := ranOf(t, cmd)
 	if !ok {
 		t.Fatalf("confirming produced %T, want a ranMsg", msg)
 	}
@@ -516,5 +554,134 @@ func TestEveryScreenRendersAtEveryWidth(t *testing.T) {
 			}
 		}
 		a.mode = modeList
+	}
+}
+
+// flat collapses the line breaks the dialog wraps its body at, so a sentence
+// can be looked for in it whatever the width.
+func flat(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// On Omarchy an install is a `pacman -S --needed` (its guard hook refuses a
+// direct -Syu), and the dialog, which writes its own sentence above the
+// preview, says why: for a tool, which the kit builds, and for a companion,
+// which this launcher builds.
+func TestOmarchyInstallsSayWhyTheyAreNotASystemUpgrade(t *testing.T) {
+	for _, companion := range []bool{false, true} {
+		a, backend := newTestApp(t)
+		backend.Machine = pkgmgr.Distro{ID: "omarchy", Like: []string{"arch"}}
+		if companion {
+			selectCompanion(t, a, catalog.KindComponent)
+		} else {
+			for i, row := range a.visible {
+				if row.State == catalog.StateNotInstalled && !row.IsCompanion() {
+					a.cursor = i
+					break
+				}
+			}
+		}
+		row, _ := a.selected()
+
+		press(t, a, "i")
+		if a.mode != modeConfirm {
+			t.Fatalf("%s: i did not open the confirm dialog", row.Package)
+		}
+		want := "pacman -S --needed --noconfirm " + row.Package
+		if companion {
+			// A companion is named in the family repository, so pacman
+			// cannot take a distribution build of the same name instead.
+			want = "pacman -S --needed --noconfirm tui-tools/" + row.Package
+		}
+		if !strings.Contains(a.confirm.Command, want) ||
+			strings.Contains(a.confirm.Command, "-Syu") {
+			t.Errorf("%s: the preview is %q, want %q", row.Package,
+				a.confirm.Command, want)
+		}
+		if !strings.Contains(flat(a.confirm.Body), pkgmgr.OmarchyNote) {
+			t.Errorf("%s: the dialog does not carry the Omarchy note: %q",
+				row.Package, a.confirm.Body)
+		}
+	}
+
+	// Plain Arch keeps the -Syu and says nothing about Omarchy. (The demo
+	// machine is Omarchy Server, so Arch has to be asked for.)
+	a, backend := newTestApp(t)
+	backend.Machine = pkgmgr.Distro{ID: "arch"}
+	selectCompanion(t, a, catalog.KindComponent)
+	press(t, a, "i")
+	if !strings.Contains(a.confirm.Command, "-Syu") ||
+		strings.Contains(strings.ToLower(a.confirm.Body), "omarchy") {
+		t.Errorf("on Arch the dialog is %q over %q", a.confirm.Body,
+			a.confirm.Command)
+	}
+}
+
+// A long install must not look frozen: from the moment it is confirmed until
+// it returns, the status line says what is running and for how long, and the
+// once-a-second tick keeps asking for a redraw. When the sequence returns the
+// tick dies and the usual result takes the line.
+func TestTheStatusLineCountsWhileASequenceRuns(t *testing.T) {
+	a, _ := newTestApp(t)
+	row := selectCompanion(t, a, catalog.KindComponent)
+
+	press(t, a, "i")
+	cmd := press(t, a, "y")
+	running := "Install " + row.Package + ": running"
+	if got := a.shownStatus(); !strings.HasPrefix(got, running) {
+		t.Fatalf("while running the status is %q, want %q…", got, running)
+	}
+	if a.shownKind() != ui.StatusInfo {
+		t.Errorf("while running the status kind is %v", a.shownKind())
+	}
+	a.since = time.Now().Add(-65 * time.Second)
+	if got := a.shownStatus(); !strings.HasSuffix(got, "1m05s") {
+		t.Errorf("after 65 s the status is %q", got)
+	}
+	if !strings.Contains(a.View(), running) {
+		t.Error("the dashboard does not show the running message")
+	}
+	if _, next := a.Update(ui.RunningTickMsg(time.Now())); next == nil {
+		t.Error("a tick while running did not schedule the next one")
+	}
+
+	msg, ok := ranOf(t, cmd)
+	if !ok {
+		t.Fatalf("confirming produced %T, want a ranMsg", msg)
+	}
+	a.Update(msg)
+	if _, next := a.Update(ui.RunningTickMsg(time.Now())); next != nil {
+		t.Error("the tick kept going after the sequence returned")
+	}
+	if got := a.shownStatus(); got != "Install "+row.Package+": done" {
+		t.Errorf("after the sequence the status is %q", got)
+	}
+}
+
+// A companion installed from another repository (the demo's headscale comes
+// from extra) is not updated from the family's: that update is a qualified
+// tui-tools/headscale, which would swap the build without the switch dialog.
+// u says so and points at o, and o still offers the switch.
+func TestUpdatingAForeignCompanionPointsAtTheSwitch(t *testing.T) {
+	a, backend := newTestApp(t)
+	row := selectCompanion(t, a, catalog.KindMirror)
+	if row.Origin.Family || row.Origin.Repo == "" {
+		t.Fatalf("the demo mirror is not installed from elsewhere: %+v", row.Origin)
+	}
+
+	press(t, a, "u")
+	if a.mode == modeConfirm {
+		t.Fatalf("u opened %q on a foreign companion", a.confirm.Command)
+	}
+	if !strings.Contains(a.status, "press o") {
+		t.Errorf("the refusal does not point at o: %q", a.status)
+	}
+	if len(backend.Ran) != 0 {
+		t.Errorf("something ran: %v", backend.Previews())
+	}
+
+	press(t, a, "o")
+	if a.mode != modeConfirm ||
+		!strings.Contains(a.confirm.Command, "tui-tools/"+row.Package) {
+		t.Errorf("o does not offer the switch: mode %v, %q", a.mode,
+			a.confirm.Command)
 	}
 }

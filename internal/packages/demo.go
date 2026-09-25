@@ -85,19 +85,17 @@ func (f *Fake) companionAnswer(cmd pkgmgr.Command) (out string, mutation, handle
 			return "", false, false
 		}
 		return f.sync(names), false, true
-	case "-S":
-		repo, name, ok := f.switchTarget(cmd.Argv[1:])
-		if !ok {
+	case "-S", "-Syu":
+		// An install, an upgrade or a switch: each package is either named
+		// in a repository (`tui-tools/headscale`, which is how the launcher
+		// asks for the family's build) or bare, in which case pacman takes
+		// it from the first repository pacman.conf lists that carries it.
+		targets := f.companionTargets(cmd.Argv[2:])
+		if len(targets) == 0 {
 			return "", false, false
 		}
-		f.install(name, repo)
-		return "ok", true, true
-	case "-Syu":
-		if len(names) == 0 {
-			return "", false, false
-		}
-		for _, name := range names {
-			f.install(name, RepoName)
+		for _, target := range targets {
+			f.install(target.name, target.repo)
 		}
 		return "ok", true, true
 	case "-R":
@@ -126,19 +124,34 @@ func (f *Fake) companionArgs(args []string) []string {
 	return names
 }
 
-// switchTarget reads a `<repo>/<name>` argument, which is how pacman is told
-// which repository to install from.
-func (f *Fake) switchTarget(args []string) (repo, name string, ok bool) {
+// companionTarget is one package of an install: the companion and the
+// repository it is taken from.
+type companionTarget struct{ repo, name string }
+
+// companionTargets reads the packages an install names. A `<repo>/<name>`
+// argument names its repository; a bare companion name resolves the way pacman
+// resolves it, to the first repository that carries it (reposOffering).
+func (f *Fake) companionTargets(args []string) []companionTarget {
+	var targets []companionTarget
 	for _, arg := range args {
-		repo, name, ok = strings.Cut(arg, "/")
+		repo, name, ok := strings.Cut(arg, "/")
 		if !ok {
+			name = arg
+		}
+		companion, known := f.Companions[name]
+		if !known {
 			continue
 		}
-		if _, known := f.Companions[name]; known {
-			return repo, name, true
+		if !ok {
+			repos := f.reposOffering(companion)
+			if len(repos) == 0 {
+				continue
+			}
+			repo = repos[0]
 		}
+		targets = append(targets, companionTarget{repo: repo, name: name})
 	}
-	return "", "", false
+	return targets
 }
 
 // install moves a companion to the version a repository offers, and records
