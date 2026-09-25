@@ -92,6 +92,12 @@ type app struct {
 	loadFailed bool
 	// busy blocks input while a sequence runs.
 	busy bool
+	// running names the sequence in flight and since is when it started.
+	// While running is set the status line counts the elapsed time, once a
+	// second (ui.RunningTick), so a download that takes minutes does not look
+	// like a frozen screen.
+	running string
+	since   time.Time
 }
 
 // loadedMsg carries the result of a read: the catalog, and what this machine
@@ -266,6 +272,25 @@ func (a *app) setStatus(kind ui.StatusKind, message string) {
 	a.statusKind = kind
 }
 
+// shownKind is the kind of message the status line shows: information while a
+// sequence runs, the recorded kind otherwise.
+func (a *app) shownKind() ui.StatusKind {
+	if a.running != "" {
+		return ui.StatusInfo
+	}
+	return a.statusKind
+}
+
+// shownStatus is the message the status line shows. While a sequence runs it
+// is ui.RunningMessage, "Install tui-cert: running… 1m05s", recomputed on every
+// redraw, which the once-a-second tick guarantees.
+func (a *app) shownStatus() string {
+	if a.running != "" {
+		return ui.RunningMessage(a.running, time.Since(a.since))
+	}
+	return a.status
+}
+
 // setStatusf records a formatted message for the status line.
 func (a *app) setStatusf(kind ui.StatusKind, format string, args ...any) {
 	a.setStatus(kind, fmt.Sprintf(format, args...))
@@ -284,6 +309,13 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ranMsg:
 		return a.handleRan(msg)
+
+	case ui.RunningTickMsg:
+		if a.running == "" {
+			// The sequence returned: let the tick die.
+			return a, nil
+		}
+		return a, ui.RunningTick()
 
 	case launchedMsg:
 		a.busy = false
@@ -345,6 +377,7 @@ func (a *app) handleLoaded(msg loadedMsg) (tea.Model, tea.Cmd) {
 // handleRan folds a finished sequence into the model.
 func (a *app) handleRan(msg ranMsg) (tea.Model, tea.Cmd) {
 	a.busy = false
+	a.running = ""
 	a.transcript = msg.transcript
 	a.transcriptTitle = msg.title
 	a.transcriptOffset = 0
@@ -401,9 +434,10 @@ func (a *app) handleConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	a.busy = true
+	a.running, a.since = answer.title, time.Now()
 	a.setStatusf(ui.StatusInfo, "%s: running %d command(s)…",
 		answer.title, len(answer.steps))
-	return a, a.runSequence(answer)
+	return a, tea.Batch(a.runSequence(answer), ui.RunningTick())
 }
 
 // handleFilter resolves the filter prompt.
@@ -534,7 +568,7 @@ func (a *app) confirmPackage(what action) tea.Cmd {
 	a.mode = modeConfirm
 	a.confirm = ui.Confirm{
 		Title:   title,
-		Body:    a.wrapBody(actionBody(what, row)),
+		Body:    a.wrapBody(actionBody(what, row, a.backend.Distro())),
 		Command: a.previewAll(steps),
 		Danger:  what == actionRemove,
 		Payload: pending{title: title, steps: steps},
@@ -554,9 +588,11 @@ func (a *app) steps(what action, row catalog.Row) ([]pkgmgr.Command, error) {
 	if row.IsCompanion() {
 		switch what {
 		case actionInstall:
-			return packages.BuildCompanionInstall(a.backend.Manager(), names)
+			return packages.BuildCompanionInstall(a.backend.Manager(),
+				a.backend.Distro(), names)
 		case actionUpgrade:
-			return packages.BuildCompanionUpgrade(a.backend.Manager(), names)
+			return packages.BuildCompanionUpgrade(a.backend.Manager(),
+				a.backend.Distro(), names)
 		default:
 			return packages.BuildCompanionRemove(a.backend.Manager(), names)
 		}
@@ -600,7 +636,17 @@ func refuse(what action, row catalog.Row) (string, bool) {
 
 // actionBody is the sentence above the command preview: what the sequence will
 // do, in the user's terms.
-func actionBody(what action, row catalog.Row) string {
+//
+// It is written here rather than taken from the step's Command.Explain, so on
+// Omarchy it carries pkgmgr.OmarchyNote itself: the install and the upgrade
+// there are a `pacman -S` rather than the -Syu the rest of the Arch family
+// gets, and the user deserves to read why before confirming. A removal is the
+// same command everywhere and says nothing more.
+func actionBody(what action, row catalog.Row, distro pkgmgr.Distro) string {
+	note := ""
+	if distro.Omarchy() {
+		note = " " + pkgmgr.OmarchyNote
+	}
 	switch what {
 	case actionInstall:
 		body := row.Package + " will be installed from the tui-tools repository, " +
@@ -608,11 +654,11 @@ func actionBody(what action, row catalog.Row) string {
 		if row.Kind == catalog.KindMirror {
 			body += " It is " + packages.ProvenanceLine + "."
 		}
-		return body
+		return body + note
 	case actionUpgrade:
 		return fmt.Sprintf(
 			"%s will be upgraded from %s to %s.", row.Package,
-			blank(row.Installed), blank(row.Available))
+			blank(row.Installed), blank(row.Available)) + note
 	default:
 		return row.Package + " will be removed. What it pulled in stays: " +
 			"nothing is autoremoved."
