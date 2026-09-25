@@ -316,14 +316,23 @@ func TestSwitchRefusesWhatItCannotName(t *testing.T) {
 	}
 }
 
-// Several repositories can offer the same companion, and `pacman -S` takes the
-// first one pacman.conf lists. The available version has to be that one, or a
-// row claims an update the machine would not get.
+// Several repositories can offer the same companion, and a bare `pacman -S`
+// takes the first one pacman.conf lists, which is the distribution's. The
+// launcher's install and upgrade name tui-tools/<name>, so the available
+// version has to be the family repository's, or a row claims an update the
+// machine would not get (the lab's Omarchy guest showed a family headscale as
+// "update available" to extra's newer build). A package the family repository
+// does not carry has no available version at all.
 func TestPacmanAvailableIsTheVersionAnInstallWouldFetch(t *testing.T) {
 	got := parseVersions(pkgmgr.ManagerPacman, pacmanSync, true)
-	if got["headscale"] != "0.25.1-1" {
-		t.Errorf("available = %q, want the first repository's %q",
-			got["headscale"], "0.25.1-1")
+	if got["headscale"] != "0.26.1-1" {
+		t.Errorf("available = %q, want the family repository's %q",
+			got["headscale"], "0.26.1-1")
+	}
+	only := parseVersions(pkgmgr.ManagerPacman,
+		"Repository      : extra\nName            : caddy\nVersion         : 2.9.1-1\n", true)
+	if v, ok := only["caddy"]; ok {
+		t.Errorf("a package only extra carries is available at %q", v)
 	}
 }
 
@@ -410,10 +419,10 @@ func TestDemoCompanionsGoThroughTheRealParsers(t *testing.T) {
 		t.Errorf("a component nobody installed is installed: %v", installed)
 	}
 	// The demo machine has the family repository last in pacman.conf, as a real
-	// one does, so what a bare install would fetch is the distribution's build
-	// and that is what "available" says. What the family offers is a separate
-	// answer, and it is in the origin.
-	if available["headscale"] != "0.25.1-1" ||
+	// one does, so a bare install would fetch the distribution's build. The
+	// launcher's install names the family repository, so "available" is what
+	// the family offers, whatever pacman.conf lists first.
+	if available["headscale"] != "0.26.1-1" ||
 		available["tui-tools-example"] != "0.1.0-1" {
 		t.Errorf("available = %v", available)
 	}

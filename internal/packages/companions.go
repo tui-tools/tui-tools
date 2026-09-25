@@ -737,23 +737,22 @@ func pacmanVersions(out string) map[string]string {
 	return versions
 }
 
-// pacmanSyncFirst reads `pacman -Si` and keeps the first version each package
-// is offered at, which is the version an install would actually fetch.
+// pacmanFamilyVersions reads `pacman -Si` and keeps the version the family
+// repository offers for each package, which is the version an install or an
+// upgrade from this launcher fetches: on pacman those name every companion as
+// tui-tools/<name> (BuildCompanionInstall).
 //
-// The kit's own reader keeps the last, and for a tool the two are the same
-// answer: a tui-<word> package exists in one repository and the output has one
-// block. A companion carries the upstream project's name, so several
-// repositories can offer it and the output has a block for each — in the order
-// they appear in pacman.conf, which is the order `pacman -S` resolves a bare
-// name in. First is therefore the one that would be installed.
-func pacmanSyncFirst(out string) map[string]string {
+// The kit's own reader keeps the last block, and for a tool that is the same
+// answer: a tui-<word> package exists in one repository. A companion carries
+// the upstream project's name, so several repositories can offer it, and the
+// distribution's come first in pacman.conf. Neither first nor last is the
+// answer then; the block whose Repository is the family's is. A companion the
+// family repository does not carry has no available version, which is true:
+// nothing this launcher builds could install it.
+func pacmanFamilyVersions(out string) map[string]string {
 	versions := map[string]string{}
-	for _, block := range pacmanBlocks(out) {
-		name, version := block["Name"], block["Version"]
-		if name == "" || version == "" {
-			continue
-		}
-		if _, seen := versions[name]; !seen {
+	for name, repos := range pacmanRepoVersions(out) {
+		if version, ok := repos[RepoName]; ok {
 			versions[name] = version
 		}
 	}
@@ -856,7 +855,7 @@ func parseVersions(manager pkgmgr.Manager, out string, sync bool) map[string]str
 	switch manager {
 	case pkgmgr.ManagerPacman:
 		if sync {
-			return pacmanSyncFirst(out)
+			return pacmanFamilyVersions(out)
 		}
 		return pkgmgr.ParsePacmanQuery(out)
 	case pkgmgr.ManagerAPT:
