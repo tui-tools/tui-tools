@@ -107,7 +107,9 @@
           "impact": "pacman records no repository for an installed package, so a companion's origin is inferred rather than read: a bare `[installed]` in `pacman -Sl tui-tools` means the machine has the version that repository offers, and `pacman -Si` names the repository whose version matches the installed one"
         }
       ],
-      "tested": []
+      "tested": [
+        "7.1.0"
+      ]
     },
     {
       "name": "apt",

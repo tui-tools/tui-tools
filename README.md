@@ -520,7 +520,7 @@ hidden; one below the minimum is marked as such and the tool still runs.
 | Binary | `pacman` |
 | Version read with | `pacman --version` |
 | Minimum | 6.0 |
-| Tested | none yet |
+| Tested | `7.1.0` |
 
 | Versions | What changes |
 | --- | --- |
