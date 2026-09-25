@@ -155,13 +155,19 @@ func BuildCompanionAvailable(manager pkgmgr.Manager,
 // -------------------------------------------------------------- mutations ---
 
 // BuildCompanionInstall builds the steps that install the named companion
-// packages, in the shapes tui-kit settled on for the family's own tools: apt is
-// given a refresh first, dnf refreshes an expired cache itself, and pacman
-// installs with `-Syu`, which is the only form Arch supports.
-func BuildCompanionInstall(manager pkgmgr.Manager,
+// packages, in the shapes tui-kit settled on for the family's own tools
+// (pkgmgr.BuildInstallOn): apt is given a refresh first, dnf refreshes an
+// expired cache itself, and pacman installs with `-Syu`, which is the only
+// form Arch supports. Omarchy is the exception: its guard hook refuses a direct
+// -Syu, so there the install is `-S --needed` against the databases the last
+// refresh synced (omarchyStep).
+func BuildCompanionInstall(manager pkgmgr.Manager, distro pkgmgr.Distro,
 	names []string) ([]pkgmgr.Command, error) {
 	if err := CheckCompanionNames(names); err != nil {
 		return nil, err
+	}
+	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
+		return omarchyStep("Install", names), nil
 	}
 	switch manager {
 	case pkgmgr.ManagerAPT:
@@ -226,11 +232,15 @@ func BuildCompanionRemove(manager pkgmgr.Manager,
 }
 
 // BuildCompanionUpgrade builds the steps that upgrade the named companion
-// packages.
-func BuildCompanionUpgrade(manager pkgmgr.Manager,
+// packages, with the same Omarchy exception as BuildCompanionInstall
+// (pkgmgr.BuildUpgradeOn).
+func BuildCompanionUpgrade(manager pkgmgr.Manager, distro pkgmgr.Distro,
 	names []string) ([]pkgmgr.Command, error) {
 	if err := CheckCompanionNames(names); err != nil {
 		return nil, err
+	}
+	if manager == pkgmgr.ManagerPacman && distro.Omarchy() {
+		return omarchyStep("Upgrade", names), nil
 	}
 	switch manager {
 	case pkgmgr.ManagerAPT:
@@ -262,6 +272,23 @@ func BuildCompanionUpgrade(manager pkgmgr.Manager,
 	default:
 		return nil, unknownManager(manager)
 	}
+}
+
+// omarchyStep is the one step an Omarchy install or upgrade is: the argv
+// pkgmgr.BuildInstallOmarchy and BuildUpgradeOmarchy build for a tool, with the
+// kit's own explanation of why it is not the -Syu the rest of the Arch family
+// gets. `-S --needed` both installs a missing package and brings an installed
+// one to the version the synced databases carry, so the verb is all that
+// differs between the two.
+func omarchyStep(verb string, names []string) []pkgmgr.Command {
+	return []pkgmgr.Command{{
+		Argv: append([]string{
+			"pacman", "-S", "--needed", "--noconfirm",
+		}, names...),
+		Privileged: true,
+		Explain: verb + " " + strings.Join(names, ", ") + ". " +
+			pkgmgr.OmarchyNote,
+	}}
 }
 
 // BuildCompanionSwitch builds the steps that replace an installed package with

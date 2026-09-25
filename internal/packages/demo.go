@@ -86,11 +86,20 @@ func (f *Fake) companionAnswer(cmd pkgmgr.Command) (out string, mutation, handle
 		}
 		return f.sync(names), false, true
 	case "-S":
-		repo, name, ok := f.switchTarget(cmd.Argv[1:])
-		if !ok {
+		if repo, name, ok := f.switchTarget(cmd.Argv[1:]); ok {
+			f.install(name, repo)
+			return "ok", true, true
+		}
+		// A bare `-S` (the Omarchy install and upgrade) takes each package
+		// from the first repository pacman.conf lists that carries it.
+		if len(names) == 0 {
 			return "", false, false
 		}
-		f.install(name, repo)
+		for _, name := range names {
+			if repos := f.reposOffering(f.Companions[name]); len(repos) > 0 {
+				f.install(name, repos[0])
+			}
+		}
 		return "ok", true, true
 	case "-Syu":
 		if len(names) == 0 {

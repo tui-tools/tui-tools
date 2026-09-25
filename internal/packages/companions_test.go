@@ -39,13 +39,13 @@ func TestCompanionBuildersRefuseANameThatIsNotOne(t *testing.T) {
 	bad := []string{"headscale; rm -rf /"}
 	for _, manager := range []pkgmgr.Manager{
 		pkgmgr.ManagerAPT, pkgmgr.ManagerDNF, pkgmgr.ManagerPacman} {
-		if _, err := BuildCompanionInstall(manager, bad); err == nil {
+		if _, err := BuildCompanionInstall(manager, pkgmgr.Distro{}, bad); err == nil {
 			t.Errorf("%s: install accepted %q", manager, bad[0])
 		}
 		if _, err := BuildCompanionRemove(manager, bad); err == nil {
 			t.Errorf("%s: remove accepted %q", manager, bad[0])
 		}
-		if _, err := BuildCompanionUpgrade(manager, bad); err == nil {
+		if _, err := BuildCompanionUpgrade(manager, pkgmgr.Distro{}, bad); err == nil {
 			t.Errorf("%s: upgrade accepted %q", manager, bad[0])
 		}
 		if _, err := BuildCompanionInstalled(manager, bad); err == nil {
@@ -469,7 +469,7 @@ func TestDemoInstallsAndRemovesACompanion(t *testing.T) {
 	machine := demoMachine()
 	ctx := context.Background()
 
-	steps, err := BuildCompanionInstall(machine.Manager(),
+	steps, err := BuildCompanionInstall(machine.Manager(), machine.Distro(),
 		[]string{"tui-tools-example"})
 	if err != nil {
 		t.Fatalf("BuildCompanionInstall: %v", err)
@@ -497,5 +497,102 @@ func TestDemoInstallsAndRemovesACompanion(t *testing.T) {
 	installed, _ = CompanionVersions(ctx, machine, []string{"tui-tools-example"})
 	if installed["tui-tools-example"] != "" {
 		t.Errorf("after the removal the machine still has %v", installed)
+	}
+}
+
+// Omarchy refuses a direct -Syu (its pacman guard hook aborts one that does not
+// come from `omarchy update`), so a companion there is installed and upgraded
+// with `-S --needed`, exactly as tui-kit does for a tool. Plain Arch keeps the
+// -Syu it supports, and the other managers do not care about the distribution.
+func TestCompanionInstallAndUpgradeOnOmarchy(t *testing.T) {
+	names := []string{"headscale"}
+	omarchy := []pkgmgr.Distro{
+		{ID: "omarchy-server", Like: []string{"omarchy", "arch"}},
+		{ID: "omarchy", Like: []string{"arch"}},
+		// An Omarchy installed on top of an Arch keeps ID=arch; the guard
+		// hook is what gives it away.
+		{ID: "arch", UpdateGuard: true},
+	}
+	builders := map[string]func(pkgmgr.Manager, pkgmgr.Distro,
+		[]string) ([]pkgmgr.Command, error){
+		"Install": BuildCompanionInstall,
+		"Upgrade": BuildCompanionUpgrade,
+	}
+	for verb, build := range builders {
+		for _, distro := range omarchy {
+			steps, err := build(pkgmgr.ManagerPacman, distro, names)
+			if err != nil {
+				t.Fatalf("%s on %+v: %v", verb, distro, err)
+			}
+			want := "pacman -S --needed --noconfirm headscale"
+			if len(steps) != 1 || strings.Join(steps[0].Argv, " ") != want {
+				t.Errorf("%s on %+v = %v, want the one step %q",
+					verb, distro, steps, want)
+				continue
+			}
+			if !steps[0].Privileged {
+				t.Errorf("%s on %+v is not privileged", verb, distro)
+			}
+			if !strings.HasPrefix(steps[0].Explain, verb+" headscale. ") ||
+				!strings.Contains(steps[0].Explain, pkgmgr.OmarchyNote) {
+				t.Errorf("%s on %+v explains %q", verb, distro, steps[0].Explain)
+			}
+		}
+
+		// Plain Arch: the -Syu Arch supports, never a partial upgrade.
+		steps, err := build(pkgmgr.ManagerPacman,
+			pkgmgr.Distro{ID: "arch"}, names)
+		if err != nil {
+			t.Fatalf("%s on arch: %v", verb, err)
+		}
+		if len(steps) != 1 || steps[0].Argv[1] != "-Syu" {
+			t.Errorf("%s on arch = %v, want -Syu", verb, steps)
+		}
+		if strings.Contains(steps[0].Explain, "omarchy") {
+			t.Errorf("%s on arch mentions Omarchy: %q", verb, steps[0].Explain)
+		}
+
+		// A distribution that is Omarchy but not on pacman changes nothing:
+		// the exception is the pacman guard, not the name.
+		apt, err := build(pkgmgr.ManagerAPT,
+			pkgmgr.Distro{ID: "omarchy"}, names)
+		if err != nil {
+			t.Fatalf("%s apt: %v", verb, err)
+		}
+		if apt[len(apt)-1].Argv[0] != "apt-get" {
+			t.Errorf("%s apt = %v", verb, apt)
+		}
+	}
+}
+
+// On an Omarchy demo machine the companion install goes through the bare -S,
+// and the demo moves the machine the way that command would.
+func TestDemoInstallsACompanionOnOmarchy(t *testing.T) {
+	machine := demoMachine()
+	machine.Machine = pkgmgr.Distro{ID: "omarchy", Like: []string{"arch"}}
+	ctx := context.Background()
+
+	steps, err := BuildCompanionInstall(machine.Manager(), machine.Distro(),
+		[]string{"tui-tools-example"})
+	if err != nil {
+		t.Fatalf("BuildCompanionInstall: %v", err)
+	}
+	if steps[0].Argv[1] != "-S" {
+		t.Fatalf("the Omarchy install is %q", steps[0].String())
+	}
+	for _, step := range steps {
+		if _, err := machine.Run(ctx, step); err != nil {
+			t.Fatalf("%s: %v", step.String(), err)
+		}
+	}
+	installed, _ := CompanionVersions(ctx, machine, []string{"tui-tools-example"})
+	if installed["tui-tools-example"] != "0.1.0-1" {
+		t.Errorf("after the install the machine has %v", installed)
+	}
+	origin := CompanionOrigins(ctx, machine,
+		[]string{"tui-tools-example"})["tui-tools-example"]
+	if !origin.Family {
+		t.Errorf("the component did not come from the family repository: %+v",
+			origin)
 	}
 }
