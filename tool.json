@@ -96,7 +96,7 @@
       "notes": [
         {
           "range": ">=6.0",
-          "impact": "Arch has no supported way to upgrade one package against a refreshed database without upgrading the machine with it, so an update here is `pacman -Syu` with the tool named, and the confirm dialog says so before it runs"
+          "impact": "Arch has no supported partial upgrade, so an update is `pacman -Syu` with the tool named, and the dialog says so. Omarchy's pacman hook refuses a direct -Syu, so there it is `pacman -S --needed` instead, and the dialog says why"
         },
         {
           "range": ">=6.0",
