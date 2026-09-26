@@ -1,6 +1,11 @@
 {
   "schema": 1,
-  "generated": "2026-08-30T14:41:20.278Z",
+  "generated": "2026-09-26T00:03:45.670Z",
+  "family": {
+    "status": "beta",
+    "stable_from": null,
+    "notice": "Beta: the family is days old and still changing. Package names, flags and keys may move without notice until 1.0. Pin versions, and report what breaks."
+  },
   "packages": {
     "repo": "https://pkgs.tui.tools",
     "install_script": "https://pkgs.tui.tools/install.sh",
@@ -18,13 +23,15 @@
       "package": "tui-cert",
       "binary": "tui-cert",
       "tagline": "Every certificate on the machine, and what will stop working when",
-      "description": "A terminal UI for the TLS certificates on this machine. It finds them — the Let's Encrypt tree, /etc/ssl, /etc/pki, the paths an nginx, Apache or Caddy configuration names — and puts them on one screen, worst first: expired, expiring, the ones whose private key is not their key, the ones whose key every account can read.\n\nReading is done in Go. crypto/x509 parses the chain, verifies it against the system trust store and compares the key, so the whole inventory works on a machine with no openssl, no certbot and nothing else installed. Those are optional and only ever used to act.\n\nThree more screens complete it: what certbot or acme.sh manages and whether its renewal timer is really running; a live TLS handshake, on demand, which is how a certificate renewed on disk and never reloaded shows itself; and where the tool looked, including what it could not open.\n\nEvery change is previewed as the exact command line: a rehearsed renewal, a forced one with what it costs in rate limit, or a generated key pair.\n\nRun `tui-cert --demo` for a sample machine with seven certificates in seven states, and nothing touched.",
+      "description": "A terminal UI for the TLS certificates on this machine. It finds them — the Let's Encrypt tree, /etc/ssl, /etc/pki, the paths an nginx, Apache or Caddy configuration names — and puts them on one screen, worst first: expired, expiring, the ones whose private key is not their key, the ones whose key every account can read.\n\nReading is done in Go. crypto/x509 parses the chain, verifies it against the system trust store and compares the key, so the whole inventory works on a machine with nothing else installed. openssl, certbot and acme.sh are optional, and only used to act.\n\nMore screens: what certbot or acme.sh manages and whether its timer really runs, a live TLS handshake on demand, and local CAs — create one, issue server certificates for DNS names or IP addresses, trust it on this host.\n\nEvery change is previewed as the exact command line. `I` obtains a certificate by webroot or standalone, and requests nothing until the agreement says yes. `i` installs a pair to the paths a server's configuration names, never typed.\n\nRun `tui-cert --demo` for a sample machine with nine certificates and a local CA.",
       "category": "certificates",
       "icon": "https://tui.tools/tools/tui-cert/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-cert/tui-cert-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T14:02:31Z",
+      "version": "1.0.1",
+      "released": "2026-09-25T22:03:54Z",
       "unreleased": false,
+      "stability": "stable",
+      "stableSince": "1.0.0",
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -76,6 +83,10 @@
             {
               "name": "addext",
               "since": "1.1.1"
+            },
+            {
+              "name": "req-ca",
+              "since": "3.0.0"
             }
           ],
           "notes": [
@@ -84,28 +95,34 @@
               "impact": "`openssl req` has no `-addext`, so a subject alternative name cannot be set on the command line; tui-cert will not write an openssl configuration file, so the generate keys say why they are unavailable rather than producing a certificate no client accepts"
             },
             {
+              "range": "<3.0.0",
+              "impact": "`openssl req` cannot sign with a CA (`-CA` arrived in 3.0), and tui-cert signs only through it rather than write an extensions file: the local CA keys say why they are unavailable, and everything else works"
+            },
+            {
               "range": ">=1.1.1",
-              "impact": "openssl is only ever used to generate a key pair; nothing is read with it, so a machine without it loses two keys and keeps every screen"
+              "impact": "openssl is only ever used to generate a key pair or sign one with a local CA; nothing is read with it, so a machine without it loses those keys and keeps every screen"
             }
           ]
         }
       },
       "repo": "https://github.com/tui-tools/tui-cert",
       "page": "https://tui.tools/tools/tui-cert/",
-      "changelog": "https://github.com/tui-tools/tui-cert/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-cert/releases/tag/v1.0.1"
     },
     {
       "name": "tui-containers",
       "package": "tui-containers",
       "binary": "tui-containers",
       "tagline": "Every container on one screen, docker and podman together",
-      "description": "A terminal UI for the containers on a machine. Docker and Podman are two engines with two stores, two sets of commands and — for Podman — two scopes that do not see each other; tui-containers puts them on one list, worst first: the ones exited non-zero, the ones stuck restarting, the ones their own health check disagrees with.\n\nA container is more than its row. Open one and it says what it is using right now from a single `stats --no-stream` sample, what it is mounted on, which networks it is on, what its health check has actually been printing, and its environment — with any value whose name contains PASS, SECRET, TOKEN or KEY replaced, and the name still on screen.\n\nLogs are a pane, read with `logs --tail` and re-read on a timer: nothing is left following.\n\nChanges are previewed as the exact command line. Start, stop, restart, kill, pause, remove, `update --restart`, an image pull, `compose up -d`/`down`/`pull` for a project — with the project name and directory read from the labels Compose itself wrote. Every prune is a sentence you pick before it is a flag. There is no `exec`.\n\nRun `tui-containers --demo` to drive a sample machine with both engines, and nothing touched.",
+      "description": "A terminal UI for the containers on a machine. Docker and Podman are two engines with two stores, two sets of commands and — for Podman — two scopes that do not see each other; tui-containers puts them on one list, worst first: the ones exited non-zero, the ones stuck restarting, the ones their own health check disagrees with.\n\nA container is more than its row. Open one and it says what it is using, what it is mounted on, what its health check has been printing, and its environment — with any value whose name says it is a secret replaced, and the name still on screen. Logs are a pane, re-read on a timer rather than followed.\n\nChanges are previewed as the exact command line: the lifecycle verbs, remove, `update --restart`, a pull, `compose up -d`/`down`/`pull` from the labels Compose wrote, and every prune as a sentence, not a flag.\n\n`N` runs a new container from an image — name, ports, mounts, an `--env-file` path, a restart policy — showing the whole `run -d` line first. `n` creates a volume or a network. There is no inline environment value: a secret typed into a form would sit in the preview and in `inspect`.\n\nRun `tui-containers --demo` for a sample machine with both engines.",
       "category": "containers",
       "icon": "https://tui.tools/tools/tui-containers/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-containers/tui-containers-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T14:14:50Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:21:17Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -191,20 +208,22 @@
       },
       "repo": "https://github.com/tui-tools/tui-containers",
       "page": "https://tui.tools/tools/tui-containers/",
-      "changelog": "https://github.com/tui-tools/tui-containers/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-containers/releases/tag/v0.2.2"
     },
     {
       "name": "tui-cron",
       "package": "tui-cron",
       "binary": "tui-cron",
       "tagline": "Every scheduled job on one screen, systemd timers and cron together",
-      "description": "A terminal UI for everything scheduled on a machine. systemd timers and cron are two schedulers with two syntaxes, two sets of commands and two ways of reporting what happened; tui-cron puts them on one list — the name, the schedule as written, the next run, the last run and how it went.\n\nNext to every expression is what it means, in English. `17 3 * * 1` and `*-*-01..07 12:00:00` are both precise and neither is readable, and the mistakes people make with them are mistakes of reading. The reading is generated by the tool's own describer for cron and for OnCalendar, and the detail screen adds the next five runs as `systemd-analyze calendar` computes them.\n\nChanges are previewed. A timer's schedule goes to a drop-in — the unit file is never rewritten — checked with `systemd-analyze calendar` first. A crontab is replaced through `crontab <file>`, cron's own interface, with the diff on screen. A cron line can be converted into a timer, written but deliberately not enabled.\n\nRun `tui-cron --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "description": "A terminal UI for everything scheduled on a machine. systemd timers and cron are two schedulers with two syntaxes and two ways of reporting what happened; tui-cron puts them on one list — the name, the schedule as written, the next run, the last run and how it went.\n\nNext to every expression is what it means, in English. `17 3 * * 1` and `*-*-01..07 12:00:00` are both precise and neither is readable, and the mistakes people make with them are mistakes of reading. The reading comes from the tool's own describer, and the detail screen adds the next five runs as `systemd-analyze calendar` computes them.\n\nChanges are previewed. A timer's schedule goes to a drop-in, checked with `systemd-analyze calendar` first; the unit file is never rewritten. A crontab is replaced through `crontab <file>`, cron's own interface, with the diff on screen; as root, into another account's table or /etc/cron.d. A cron line can become a timer, written but not enabled. A timer this tool wrote says so in its files, and only those can be re-pointed or deleted.\n\nRun `tui-cron --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
       "category": "scheduling",
       "icon": "https://tui.tools/tools/tui-cron/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-cron/tui-cron-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T14:02:40Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:19:47Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -275,7 +294,60 @@
       },
       "repo": "https://github.com/tui-tools/tui-cron",
       "page": "https://tui.tools/tools/tui-cron/",
-      "changelog": "https://github.com/tui-tools/tui-cron/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-cron/releases/tag/v0.2.2"
+    },
+    {
+      "name": "tui-dc",
+      "package": "tui-dc",
+      "binary": "tui-dc",
+      "tagline": "A Samba Active Directory domain, administered from the terminal",
+      "description": "A terminal UI over `samba-tool` for a machine that is a Samba Active Directory domain controller. It opens read-only: the domain's name and functional levels, the role this host plays in it, the password policy, the accounts, the groups, the machine accounts, the domain's own DNS zone, and the state of replication per naming context.\n\nEvery change is one `samba-tool` command, shown in full and confirmed before it runs — and no password is ever an argument. samba-tool warns about that itself, because a command line is visible in `ps` to every user on the machine, so creating an account and resetting a password ask samba-tool for a random password and show what it printed — and provisioning omits `--adminpass` so samba-tool generates the Administrator password itself and prints it exactly once.\n\nOn a machine that has samba-tool and no domain, a wizard provisions one: realm, NetBIOS name, DNS backend, optional forwarder, the realm typed back as a second confirmation, then the usual previewed command. It does not join or demote a domain: both touch a trust relationship with another controller, and are worth reading in a shell where they can be checked twice.",
+      "category": "users",
+      "icon": "https://tui.tools/tools/tui-dc/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-dc/tui-dc-domain.png",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:03:33Z",
+      "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "samba"
+      ],
+      "compat": {
+        "samba": {
+          "binary": "samba-tool",
+          "minimum": "4.13",
+          "tested": [
+            "4.19.5",
+            "4.24.6",
+            "4.24.7"
+          ],
+          "features": [
+            {
+              "name": "computer-subcommand",
+              "since": "4.8"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<4.8",
+              "impact": "`samba-tool computer` does not exist, so the computers screen is empty"
+            },
+            {
+              "range": "<4.13",
+              "impact": "untested: the output of `domain info`, `dns query` and `drs showrepl` has changed shape across releases, and the parsers are checked against live controllers running 4.19.5, 4.24.6 and 4.24.7; nothing older, and nothing between 4.13 and 4.19, has been exercised"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-dc",
+      "page": "https://tui.tools/tools/tui-dc/",
+      "changelog": "https://github.com/tui-tools/tui-dc/releases/tag/v0.2.2"
     },
     {
       "name": "tui-disk",
@@ -286,9 +358,11 @@
       "category": "storage",
       "icon": "https://tui.tools/tools/tui-disk/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-disk/tui-disk-devices.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T14:03:24Z",
+      "version": "0.1.4",
+      "released": "2026-09-25T22:21:47Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -378,20 +452,22 @@
       },
       "repo": "https://github.com/tui-tools/tui-disk",
       "page": "https://tui.tools/tools/tui-disk/",
-      "changelog": "https://github.com/tui-tools/tui-disk/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-disk/releases/tag/v0.1.4"
     },
     {
       "name": "tui-firewall",
       "package": "tui-firewall",
       "binary": "tui-firewall",
-      "tagline": "ufw and firewalld, with every change previewed before it runs",
-      "description": "A terminal UI for the Linux firewall, driving **ufw** and **firewalld**. It shows the rules you actually have — action, ports, source, destination, services, rich rules, IPv6 and forwarding included — alongside the default policies or zone targets and the logging level.\n\nThe UI never builds a command line. It talks to a backend behind an interface, which returns a firewall-neutral model and produces command values; the confirm dialog shows those values and hands the same ones to the runner, so what you read is what executes. On firewalld that means both lines: the change to the running firewall and the same change made permanent, with no reload and no dropped connections.\n\nRun `tui-firewall --demo` for an in-memory ufw, or `tui-firewall --demo=firewalld` for an in-memory firewalld: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "tagline": "ufw, firewalld, iptables and nftables, every change previewed before it runs",
+      "description": "A terminal UI for the Linux firewall, driving **ufw**, **firewalld**, **iptables** and **nftables** directly. It shows the rules you actually have — action, ports, source, destination, services, rich rules, IPv6 and forwarding included — alongside the default policies or chain policies and the logging level.\n\nThe UI never builds a command line: the confirm dialog shows the backend's command values and hands the same ones to the runner, so what you read is what executes.\n\nOn a machine nothing else manages it drives nft itself: filter chains by hook, a NAT view, and named sets as aliases. It writes only where it safely can, and says why when it will not.\n\nOn a cloud image whose iptables rules are restored at boot by iptables-persistent or iptables-services, a new rule lands in front of the catch-all REJECT, and persisting is its own previewed step.\n\nRun `tui-firewall --demo` for an in-memory ufw, `--demo=firewalld` for firewalld, `--demo=iptables` for a cloud-image iptables, or `--demo=nftables` for a sample router ruleset: every command is built and previewed for real, and nothing touches your system.",
       "category": "firewall",
       "icon": "https://tui.tools/tools/tui-firewall/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-firewall/tui-firewall-main.png",
-      "version": "0.2.2",
-      "released": "2026-08-30T13:37:16Z",
+      "version": "0.6.1",
+      "released": "2026-09-25T22:23:19Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -399,7 +475,9 @@
       "license": "MIT",
       "backends": [
         "ufw",
-        "firewalld"
+        "firewalld",
+        "iptables",
+        "nftables"
       ],
       "compat": {
         "ufw": {
@@ -442,24 +520,61 @@
               "impact": "firewalld removed the lockdown feature, so no lockdown state is shown"
             }
           ]
+        },
+        "iptables": {
+          "binary": "iptables",
+          "minimum": "1.6",
+          "tested": [
+            "1.8.10",
+            "1.8.11"
+          ],
+          "features": [],
+          "notes": [
+            {
+              "range": "<1.8",
+              "impact": "only the legacy xtables interface exists, so the rules live outside nf_tables and the nft ruleset cannot show them; the backend reads them through iptables-save and the selector asks the legacy tables directly"
+            },
+            {
+              "range": ">=1.8",
+              "impact": "iptables-nft writes table ip filter and ip6 filter in nf_tables, and `iptables --version` says which variant is installed; the nftables backend treats those tables as read-only and points here"
+            }
+          ]
+        },
+        "nftables": {
+          "binary": "nft",
+          "minimum": "0.9",
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": "<0.9",
+              "impact": "`nft -j` does not exist yet, so there is no ruleset to read in any form this tool will parse. 0.9.0 is where nft grew JSON output and stamped it json_schema_version 1, the schema this backend reads, and that is the whole reason the minimum is 0.9"
+            },
+            {
+              "range": ">=0.9",
+              "impact": "`nft -j list ruleset` carries rule handles whether or not `-a` is given, unlike the human output. A handle is how a rule is deleted, because positions shift the moment anything is inserted above them"
+            }
+          ]
         }
       },
       "repo": "https://github.com/tui-tools/tui-firewall",
       "page": "https://tui.tools/tools/tui-firewall/",
-      "changelog": "https://github.com/tui-tools/tui-firewall/releases/tag/v0.2.2"
+      "changelog": "https://github.com/tui-tools/tui-firewall/releases/tag/v0.6.1"
     },
     {
       "name": "tui-logs",
       "package": "tui-logs",
       "binary": "tui-logs",
       "tagline": "The journal on one screen: narrow it, follow it, and shrink it safely",
-      "description": "A terminal UI for the systemd journal. Every filter it offers is a journalctl argument — unit, priority, boot, time window, `--grep`, kernel only, the user journal — and the command line they add up to is on the status bar, so what you are looking at is always something you could have typed.\n\nPress enter on a line and you get the record rather than the sentence: the pid, the uid, the executable and its command line, the source file and line for a program that logs through sd-journal, the MESSAGE_ID with a name for the well-known ones, and every other field the journal happened to carry. There is no clipboard to copy it with, so the screen shows the `journalctl --cursor` invocation that prints that entry instead.\n\nA second screen counts the window on show: errors, the noisiest units, a sparkline. A third says what the journal costs, whether it survives a reboot, and what journald.conf resolves to.\n\nHousekeeping is four commands, each previewed and confirmed: vacuum by size, vacuum by age, rotate, verify. Nothing else here writes anything.\n\nRun `tui-logs --demo` to drive a sample journal: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "description": "A terminal UI for the systemd journal. Every filter it offers is a journalctl argument — unit, priority, boot, time window, `--grep`, kernel only, the user journal — and the command line they add up to is on the status bar, so what is on screen is always something you could have typed.\n\nPress enter on a line and you get the record rather than the sentence: the pid, the uid, the executable and its command line, the source file and line for a program that logs through sd-journal, the MESSAGE_ID named where it is a well-known one, and every other field it carried. There is no clipboard, so the screen shows the `journalctl --cursor` invocation that prints that entry instead.\n\nA second screen counts the window: errors, the noisiest units, a sparkline. A third says what the journal costs and what journald.conf resolves to — and changes it: one key sets SystemMaxUse, MaxRetentionSec and Storage in a drop-in of its own, shown as a diff first.\n\nHousekeeping is four more commands, each previewed and confirmed: vacuum by size or age, rotate, verify.\n\nRun `tui-logs --demo` to drive a sample journal: every key works, every command is built and previewed for real, nothing is touched.",
       "category": "logs",
       "icon": "https://tui.tools/tools/tui-logs/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-logs/tui-logs-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T13:53:53Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:03:46Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -501,27 +616,31 @@
       },
       "repo": "https://github.com/tui-tools/tui-logs",
       "page": "https://tui.tools/tools/tui-logs/",
-      "changelog": "https://github.com/tui-tools/tui-logs/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-logs/releases/tag/v0.2.2"
     },
     {
       "name": "tui-network",
       "package": "tui-network",
       "binary": "tui-network",
       "tagline": "Links, addresses, routes and DNS, with every change previewed before it runs",
-      "description": "A terminal UI for the machine's network. It shows the links you actually have — state, type, addresses, gateway, MAC, MTU and driver — with the routing table, what systemd-resolved is using for DNS, and the `.network` file behind each link.\n\nOpen a link and you get the whole picture in one screen: its addresses and where each came from, its routes, its DNS servers and search domains, its DHCP lease, the `.network` file that configures it, and what systemd-networkd has been saying about it in the journal.\n\nChanges are previewed. Bringing a link up or down, reconfiguring it, renewing a lease, setting DNS at runtime, and editing a `.network` file — which shows a unified diff and then installs the file and reloads networkd — all go through a confirm dialog carrying the exact command line. A link systemd-networkd does not manage, because NetworkManager owns it, is shown read-only with the reason.\n\nRun `tui-network --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "description": "A terminal UI for the machine's network. It shows the links you have — state, type, addresses, gateway, MAC, MTU and driver — with the routing table, what systemd-resolved uses for DNS, and the `.network` file behind each link.\n\nOpen a link and you get the whole picture in one screen: its addresses and where each came from, its routes, DNS servers and search domains, DHCP lease, the `.network` file that configures it, and what systemd-networkd said about it in the journal.\n\nChanges are previewed. Bringing a link up or down, reconfiguring it, renewing a lease, setting DNS at runtime, and editing a `.network` file — a unified diff, then an install and a reload — all go through a confirm dialog carrying the exact command line. A link systemd-networkd does not manage is shown read-only with the reason.\n\nThe `D` screen reads the router's DHCP server — dnsmasq, Kea or networkd's own `[DHCPServer]` — with its pools, leases and reservations, `w` switches the default route or fails over, and `V` builds a VLAN or a bridge as a `.netdev` unit.\n\nRun `tui-network --demo` to drive a sample machine: every key works, every command is previewed for real, and nothing touches your system.",
       "category": "network",
       "icon": "https://tui.tools/tools/tui-network/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-network/tui-network-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T13:57:01Z",
+      "version": "0.3.2",
+      "released": "2026-09-25T22:19:49Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
       ],
       "license": "MIT",
       "backends": [
-        "systemd-networkd"
+        "systemd-networkd",
+        "dnsmasq",
+        "kea"
       ],
       "compat": {
         "systemd-networkd": {
@@ -541,6 +660,14 @@
             {
               "name": "link-up-down",
               "since": "249"
+            },
+            {
+              "name": "dhcp-server-leases",
+              "since": "246"
+            },
+            {
+              "name": "dhcp-static-lease",
+              "since": "249"
             }
           ],
           "notes": [
@@ -555,26 +682,149 @@
             {
               "range": ">=245",
               "impact": "no released systemd emits JSON from `resolvectl status`, so DNS servers and search domains are read from the text output of `resolvectl dns` and `resolvectl domain`"
+            },
+            {
+              "range": ">=245",
+              "impact": "the Gateways screen (w) reads the default routes from `ip -j route` (multipath expanded per next hop) and reachability from `ip -j route get`; the default-route switch and failover run `ip route replace` live, and a managed link also gets a persistent `[Route]` drop-in reloaded with `networkctl`"
+            },
+            {
+              "range": ">=245",
+              "impact": "VLANs and bridges (V) are written as a .netdev unit under /etc/systemd/network plus a VLAN= or Bridge= line in each member's .network file, previewed as one multi-file diff, installed with `install -m 644` and applied with a single `networkctl reload`; X removes a unit tui-network wrote with `rm -f`"
+            },
+            {
+              "range": ">=245",
+              "impact": "the DHCP screen (D) also reads systemd-networkd's own DHCP server, the one a `[DHCPServer]` section in a .network unit turns on: the pool derived from `Address=` with `PoolOffset=`/`PoolSize=`, the lease time, the advertised DNS, NTP, router and domain, and the static leases"
+            },
+            {
+              "range": ">=245",
+              "impact": "a change to that server is written to a drop-in of the tool's own (`<unit>.network.d/50-tui-network-dhcp.conf`), rendered whole and applied with `networkctl reload`; the unit itself is never rewritten, and each advertised list is cleared before it is set because a drop-in's `DNS=` adds to the unit's"
+            },
+            {
+              "range": ">=245",
+              "impact": "`[DHCPServer]` has no key for the domain (`EmitDomains=` belongs to `[IPv6SendRA]`), so tui-network emits it as the raw option it is, `SendOption=15:string:<domain>`"
+            },
+            {
+              "range": "<246",
+              "impact": "`networkctl status` does not print the \"Offered DHCP leases\" list (systemd 246 added it), so a networkd DHCP server shows its pool and its static leases but no live ones"
+            },
+            {
+              "range": "<249",
+              "impact": "`[DHCPServerStaticLease]` does not exist (systemd 249 added it), so a static lease written on an older systemd is read back by the screen but ignored by the server"
+            }
+          ]
+        },
+        "dnsmasq": {
+          "binary": "dnsmasq",
+          "minimum": "2.80",
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=2.80",
+              "impact": "the DHCP screen reads the lease file (/var/lib/misc/dnsmasq.leases), the `dhcp-range` pools and `dhcp-host` reservations from the configuration, and dnsmasq serves DNS and DHCP from one process, so the resolver view on the links screen is only what systemd-resolved reports"
+            },
+            {
+              "range": ">=2.80",
+              "impact": "reservations tui-network adds are written to a drop-in of its own (/etc/dnsmasq.d/tui-network.conf) and applied with `systemctl reload dnsmasq`; a pool range change needs `systemctl restart dnsmasq`, which briefly interrupts DNS and DHCP"
+            },
+            {
+              "range": ">=2.80",
+              "impact": "Advertised DHCP options (DNS, gateway, domain) and upstream server= forwarders are edited through the tool's own drop-in (/etc/dnsmasq.d/50-tui-network.conf), regenerated whole; lines the tool does not own are never touched. Applying restarts dnsmasq."
+            }
+          ]
+        },
+        "kea": {
+          "binary": "kea-dhcp4",
+          "minimum": "2.0.0",
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=2.0.0",
+              "impact": "the DHCP screen reads Kea's pools and host reservations from its JSON config (/etc/kea/kea-dhcp4.conf, // and /* */ comments stripped) and its leases from the memfile CSV (/var/lib/kea/kea-leases4.csv); Kea is read-only here, so the add, remove and pool-range keys are not offered"
             }
           ]
         }
       },
       "repo": "https://github.com/tui-tools/tui-network",
       "page": "https://tui.tools/tools/tui-network/",
-      "changelog": "https://github.com/tui-tools/tui-network/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-network/releases/tag/v0.3.2"
+    },
+    {
+      "name": "tui-router",
+      "package": "tui-router",
+      "binary": "tui-router",
+      "tagline": "Every part of the router on one screen",
+      "description": "The read-only cockpit for a Linux router. One screen, one card per area — interfaces and their WAN/LAN roles, the firewall's posture, live traffic per interface, the DHCP server and its leases, the WireGuard peers — read from cheap system probes and refreshed in place.\n\nIt changes nothing itself. Press ENTER on a card and tui-router suspends, hands the terminal to the tool that manages that area — tui-firewall, tui-network, tui-traffic, tui-vpn — and resumes when you leave it, the same handoff the family launcher uses. The overview is here; the change happens in the tool the card opens, behind that tool's own preview and confirm.\n\nIt also carries what no per-area tool can: `tui-router export` writes one integrity-checked .tuiback artifact with the router's identity — the WAN/LAN roles, the networkd units, the forwarding and resolver drop-ins, DHCP/DNS, the WireGuard configs with their keys stripped, the saved firewall ruleset and the account names. `tui-router restore` puts it back behind a diff, a preview of every reload command, a typed confirmation and an atomic apply that rolls back unless you confirm you still have access (`--keep` skips that window for scripted restores).",
+      "category": "network",
+      "icon": "https://tui.tools/tools/tui-router/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-router/tui-router-main.png",
+      "version": "0.3.3",
+      "released": "2026-09-25T22:21:16Z",
+      "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "iproute2",
+        "nftables",
+        "wireguard-tools"
+      ],
+      "compat": {
+        "iproute2": {
+          "binary": "ip",
+          "minimum": "5.0",
+          "tested": [],
+          "features": [
+            {
+              "name": "json-output",
+              "since": "4.13"
+            }
+          ],
+          "notes": [
+            {
+              "range": "<4.13",
+              "impact": "`ip -j` (JSON output) is missing, so the interface and route cards cannot be read from this version"
+            }
+          ]
+        },
+        "nftables": {
+          "binary": "nft",
+          "minimum": "0.9",
+          "tested": [],
+          "features": [],
+          "notes": []
+        },
+        "wireguard-tools": {
+          "binary": "wg",
+          "minimum": "1.0",
+          "tested": [],
+          "features": [],
+          "notes": []
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-router",
+      "page": "https://tui.tools/tools/tui-router/",
+      "changelog": "https://github.com/tui-tools/tui-router/releases/tag/v0.3.3"
     },
     {
       "name": "tui-samba",
       "package": "tui-samba",
       "binary": "tui-samba",
       "tagline": "Samba shares, accounts and live connections, with every change previewed",
-      "description": "A terminal UI for a Samba file server: the shares it exports, the accounts that can reach them, and who is connected right now.\n\nThe shares are listed worst first. A path that does not exist, a directory somebody left at mode 0777, a writable share open to guests — each one is a sentence on the row rather than something to work out from `testparm` output and a `stat`. The configuration comes from `testparm -s`, which is what the server resolved rather than what anybody typed, and every share carries the Unix permissions, the owner and the SELinux label of the directory behind it.\n\nA change goes through Samba's own parser before it goes anywhere near /etc. A share is edited in a guided form, staged to a file, read back with `testparm -s` and shown as a diff — and only then confirmed. It is installed with `install -m 644` and picked up with `smbcontrol all reload-config`, which disconnects nobody.\n\nThis is a file server tool. Samba as an Active Directory domain controller is deliberately out of scope.\n\nRun `tui-samba --demo` to drive a sample server: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "description": "A terminal UI for a Samba file server: the shares it exports, the accounts that can reach them, and who is connected right now.\n\nThe shares are listed worst first. A path that does not exist, a directory somebody left at mode 0777, a writable share open to guests — each one is a sentence on the row rather than something to work out from `testparm` and a `stat`. The configuration comes from `testparm -s` — what the server resolved rather than what anybody typed — and every share carries the mode, the owner and the SELinux label of the directory behind it.\n\nA change goes through Samba's own parser before it goes anywhere near /etc. A share is edited in a guided form, staged, read back with `testparm -s` and shown as a diff — and only then confirmed. It is installed with `install -m 644` and picked up with a reload that disconnects nobody. Removing a share takes away the drop-in and the one `include` line that reached it, never the directory it exported.\n\nSamba as an Active Directory domain controller is deliberately out of scope.\n\nRun `tui-samba --demo` to drive a sample server: every key works, every command is built and previewed for real, and nothing touches your system.",
       "category": "file-sharing",
       "icon": "https://tui.tools/tools/tui-samba/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-samba/tui-samba-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T13:53:29Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:23:11Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -622,20 +872,22 @@
       },
       "repo": "https://github.com/tui-tools/tui-samba",
       "page": "https://tui.tools/tools/tui-samba/",
-      "changelog": "https://github.com/tui-tools/tui-samba/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-samba/releases/tag/v0.2.2"
     },
     {
       "name": "tui-secure",
       "package": "tui-secure",
       "binary": "tui-secure",
       "tagline": "The machine's security posture, with the command behind every verdict",
-      "description": "A terminal UI for the security posture of one Linux machine. Eight probes — Secure Boot, the MAC layer, the firewall, sshd, pending updates, accounts, kernel hardening and listening ports — each answered `ok`, `warn`, `bad` or `unknown`, with a score across the lot.\n\nEvery verdict shows its work. Open a probe and you get the exact command that was run, the line it judged, the full raw output underneath, and a fix that names either the sibling tool that owns the change (`tui-firewall`, `tui-update`) or the command to run yourself.\n\nIt reads first and asks second. Nothing escalates beyond `sudo -n`, which never prompts, so a probe that needs root it cannot get degrades to `unknown` with the reason instead of hanging on a password. Three fixes are offered inline — enabling ufw, setting one kernel hardening key with its drop-in, enabling the update timer — and each is previewed as the exact command line and confirmed first.\n\nRun `tui-secure --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "description": "A terminal UI for the security posture of one Linux machine. Eight probes — Secure Boot, the MAC layer, the firewall, sshd, pending updates, accounts, kernel hardening and listening ports — each answered `ok`, `warn`, `bad` or `unknown`, with a score across the lot.\n\nEvery verdict shows its work. Open a probe and you get the exact command that was run, the line it judged, the full raw output underneath, and a fix that names either the sibling tool that owns the change (`tui-firewall`, `tui-update`) or the command to run yourself.\n\nIt reads first and asks second. Nothing escalates beyond `sudo -n`, which never prompts, so a probe that needs root it cannot get degrades to `unknown` with the reason instead of hanging on a password. The fixes it offers are the one-liners it can preview in full: turning on ufw, firewalld or nftables, setting one kernel key or one sshd keyword through a drop-in, enabling the update timer, stopping the service behind an open port. A change that would leave nothing able to log in over ssh is refused.\n\nRun `tui-secure --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
       "category": "security",
       "icon": "https://tui.tools/tools/tui-secure/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-secure/tui-secure-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T13:58:02Z",
+      "version": "0.2.2",
+      "released": "2026-09-02T16:48:20Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -732,20 +984,22 @@
       },
       "repo": "https://github.com/tui-tools/tui-secure",
       "page": "https://tui.tools/tools/tui-secure/",
-      "changelog": "https://github.com/tui-tools/tui-secure/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-secure/releases/tag/v0.2.2"
     },
     {
       "name": "tui-snapper",
       "package": "tui-snapper",
       "binary": "tui-snapper",
       "tagline": "btrfs snapshots, managed by snapper, from the terminal",
-      "description": "A terminal UI for the btrfs snapshots `snapper` manages. It lists every config and its history — pre/post pairs from package upgrades next to the hourly timeline snapshots — compares any two of them, and shows what changed file by file, with a read-only diff for anything you want to look at closely.\n\nIt creates, deletes, relabels and cleans up snapshots too, and puts individual files back with `undochange` without touching the rest of the filesystem. Every one of those is shown as the exact `snapper` command line and confirmed before it runs; starting the tool only reads.\n\nRollback is the one thing that genuinely differs between machines, so it is detected rather than assumed: where `snapper rollback` is the mechanism it is offered with a full warning, and on an Omarchy or limine-snapper-sync layout the boot menu entries are read from `/boot/limine.conf` and shown read-only, because that is where the rollback really happens.\n\n`--demo` runs the whole UI against a sample history, so you can try it without a btrfs filesystem to risk.",
+      "description": "A terminal UI for the btrfs snapshots `snapper` manages. It lists every config and its history — pre/post pairs from package upgrades next to the hourly timeline snapshots — compares any two of them, and shows what changed file by file, with a read-only diff for anything you want to look at closely.\n\nIt creates, deletes, relabels and cleans up snapshots too, and puts individual files back with `undochange` without touching the rest of the filesystem. The configs themselves are authored from the same screen: create one for a subvolume, edit its retention limits, delete it. Every one of those is shown as the exact `snapper` command line and confirmed before it runs; starting the tool only reads.\n\nRollback is the one thing that genuinely differs between machines, so it is detected rather than assumed: where `snapper rollback` is the mechanism it is offered with a full warning, and on an Omarchy or limine-snapper-sync layout the boot menu entries are read from `/boot/limine.conf` and shown read-only, because that is where the rollback really happens.\n\n`--demo` runs the whole UI against a sample history, so you can try it without a btrfs filesystem to risk.",
       "category": "snapshots",
       "icon": "https://tui.tools/tools/tui-snapper/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-snapper/tui-snapper-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T14:13:53Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:20:50Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -787,20 +1041,22 @@
       },
       "repo": "https://github.com/tui-tools/tui-snapper",
       "page": "https://tui.tools/tools/tui-snapper/",
-      "changelog": "https://github.com/tui-tools/tui-snapper/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-snapper/releases/tag/v0.2.2"
     },
     {
       "name": "tui-ssh",
       "package": "tui-ssh",
       "binary": "tui-ssh",
       "tagline": "The SSH server as it really is, with every change previewed before it runs",
-      "description": "A terminal UI for the machine's SSH server. It asks sshd what its configuration actually is — `sshd -T`, not what a file says — and shows the settings that decide who gets in first, each with a verdict and the file and line that set it.\n\nFour more screens complete the picture: who is logged in right now and a way to end a session; what the authentication log says over the last day or week, with the addresses and accounts being tried; the host keys and their fingerprints; and the unit, its sockets and whether a brute-force blocker is installed.\n\nChanges go to a drop-in: tui-ssh never rewrites /etc/ssh/sshd_config. It writes 90-tui-ssh.conf, checks the staged file with `sshd -t -f` before asking anything, and shows the diff and both commands. sshd takes the first value it is given, so the include order is read too: if another file already sets the keyword earlier, the tool says so instead of writing a line that would be ignored.\n\nRun `tui-ssh --demo` to drive a sample server: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "description": "A terminal UI for the machine's SSH server. It asks sshd what its configuration actually is — `sshd -T`, not what a file says — and shows the settings that decide who gets in first, each with a verdict and the file and line that set it.\n\nFive more screens complete the picture: who is logged in right now and a way to end a session; what the authentication log says over the last day or week; the host keys and their fingerprints; the unit and its sockets; and the local accounts with the keys that log into them, where one is added or removed.\n\nChanges go to a drop-in: tui-ssh never rewrites /etc/ssh/sshd_config. It writes 90-tui-ssh.conf, checks the staged file with `sshd -t -f` before asking anything, and shows the diff and both commands. sshd takes the first value it is given, so the include order is read too: if another file already sets the keyword earlier, the tool says so instead of writing a line that would be ignored. A keyword can also go inside a `Match` block, which the file keeps last: sshd reads what follows one as part of it.\n\nRun `tui-ssh --demo` to drive a sample server: every key works, every command is built and previewed for real, and nothing touches your system.",
       "category": "ssh",
       "icon": "https://tui.tools/tools/tui-ssh/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-ssh/tui-ssh-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T14:03:22Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:23:14Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -850,20 +1106,22 @@
       },
       "repo": "https://github.com/tui-tools/tui-ssh",
       "page": "https://tui.tools/tools/tui-ssh/",
-      "changelog": "https://github.com/tui-tools/tui-ssh/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-ssh/releases/tag/v0.2.2"
     },
     {
       "name": "tui-systemd",
       "package": "tui-systemd",
       "binary": "tui-systemd",
       "tagline": "systemd units: what failed, why, and every action previewed",
-      "description": "A terminal UI for systemd. It opens on what failed — failed units sort first, always — and puts the journal that explains why one key away. Timers show what is scheduled and when it last fired; the boot view shows what made the last boot slow.\n\nThe unit list merges `list-units --all` with `list-unit-files`, so a unit that is installed but has never started is visible too. Every read works as an ordinary user, so the tool opens instantly and without a password; only an action escalates, and only behind a confirm dialog showing the exact `systemctl` command line.\n\nRun `tui-systemd --demo` for a sample machine with a couple of interesting failures. Nothing touches your system.",
+      "description": "A terminal UI for systemd. It opens on what failed — failed units sort first, always — and puts the journal that explains why one key away. Timers show what is scheduled and when it last fired; the boot view shows what made the last boot slow.\n\nIt also writes. `c` shows the unit file as systemd assembles it. `E` opens a guided editor over a closed set of properties — Restart, RestartSec, MemoryMax, CPUQuota, Environment, Nice, and OnCalendar on a timer — and renders the whole drop-in at `/etc/systemd/system/<unit>.d/90-tui-systemd.conf`. `n` creates a service, or a timer and the service it starts, from a vetted template. Every write is staged in a temporary directory, read by `systemd-analyze verify` before you are asked anything, shown as a unified diff, and only then installed with `install -m 644` and a `daemon-reload`.\n\nEvery read works as an ordinary user, so the tool opens instantly and without a password; only a change escalates, and only behind a confirm dialog showing the exact command lines.\n\nRun `tui-systemd --demo` for a sample machine with a couple of interesting failures. Nothing touches your system.",
       "category": "systemd",
       "icon": "https://tui.tools/tools/tui-systemd/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-systemd/tui-systemd-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T13:51:44Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:22:41Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -905,7 +1163,60 @@
       },
       "repo": "https://github.com/tui-tools/tui-systemd",
       "page": "https://tui.tools/tools/tui-systemd/",
-      "changelog": "https://github.com/tui-tools/tui-systemd/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-systemd/releases/tag/v0.2.2"
+    },
+    {
+      "name": "tui-tailscale",
+      "package": "tui-tailscale",
+      "binary": "tui-tailscale",
+      "tagline": "Self-hosted Tailscale from the terminal: the control plane and this node",
+      "description": "Self-hosted Tailscale from the terminal, both ends of it: the [Headscale](https://headscale.net) control plane on this host, and this machine as a tailnet node.\n\nThe node screens show the state, login server, addresses and routes, and the peers. `j` joins (this host's control plane offered first, join profiles pre-filling every step), with a pre-auth key that never touches a command line, and trusts a private CA when the server's certificate needs one, offering the CAs tui-cert keeps here.\n\nThe control-plane screens list headscale's users, nodes, nodes waiting to register, pre-auth keys and DNS, with one line naming the next missing step, the host firewall's ports included, which `f` hands to tui-firewall prefilled. `S` sets the transport (an own certificate picked from the pairs tui-cert issued) and can enable headscale's embedded DERP relay, `O` the identity provider (Google or any OIDC), `r` approves routes, and the dns screen edits MagicDNS, nameservers, split DNS and records. Each change to config.yaml is a minimal diff, confirmed, then a restart.\n\nWhen `tailscale` or `headscale` is absent, `i` installs it. `--demo` shows every screen with nothing installed.",
+      "category": "vpn",
+      "icon": "https://tui.tools/tools/tui-tailscale/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-tailscale/tui-tailscale-node.png",
+      "version": "1.1.0",
+      "released": "2026-09-25T22:27:38Z",
+      "unreleased": false,
+      "stability": "stable",
+      "stableSince": "1.0.0",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "tailscale",
+        "headscale"
+      ],
+      "compat": {
+        "tailscale": {
+          "binary": "tailscale",
+          "minimum": "1.60.0",
+          "tested": [
+            "1.98.4",
+            "1.102.4"
+          ],
+          "features": [],
+          "notes": []
+        },
+        "headscale": {
+          "binary": "headscale",
+          "minimum": "0.22.0",
+          "tested": [
+            "0.29.3"
+          ],
+          "features": [],
+          "notes": [
+            {
+              "range": "<0.23",
+              "impact": "`preauthkeys list` requires a `--user`, so the pre-auth keys screen may be empty; users and nodes are unaffected"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-tailscale",
+      "page": "https://tui.tools/tools/tui-tailscale/",
+      "changelog": "https://github.com/tui-tools/tui-tailscale/releases/tag/v1.1.0"
     },
     {
       "name": "tui-template",
@@ -919,6 +1230,8 @@
       "version": null,
       "released": null,
       "unreleased": true,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -951,17 +1264,155 @@
       "changelog": null
     },
     {
+      "name": "tui-tools",
+      "package": "tui-tools",
+      "binary": "tui-tools",
+      "tagline": "Every tui-tools tool in one place, installed through your package manager",
+      "description": "The launcher of the [tui-tools](https://tui.tools) family. Every tool of the family is a card: what it does, whether this machine has it, which version, and whether the repository offers a newer one.\n\nA second group holds the companions: family packages that are not terminal UIs, and upstream projects rebuilt under the family provenance gate. The row says which repository the installed copy came from; `o` switches it to the family's build.\n\nInstall, update and remove go through the distribution's own package manager — `apt`, `dnf` or `pacman` — each previewed as the exact command line and confirmed before it runs. `enter` hands the terminal to an installed tool and takes it back on exit.\n\nThe catalog it reads only says which packages exist. It never decides what reaches the machine: your package manager verifies the signed repository index and the signed package, and every package name in it is validated twice before it can reach a command line. A snapshot of it is built into the binary, so the dashboard works offline.\n\n`s` sets the repository up, with the key pinned by fingerprint.\n\nRun `tui-tools --demo` for a sample machine where every key works and nothing is touched.",
+      "category": "packages",
+      "icon": "https://tui.tools/tools/tui-tools/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-tools/tui-tools-main.png",
+      "version": "0.3.1",
+      "released": "2026-09-25T22:03:14Z",
+      "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "pacman",
+        "apt",
+        "dnf"
+      ],
+      "compat": {
+        "pacman": {
+          "binary": "pacman",
+          "minimum": "6.0",
+          "tested": [
+            "7.1.0"
+          ],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=6.0",
+              "impact": "Arch has no supported partial upgrade, so an update is `pacman -Syu` with the tool named, and the dialog says so. Omarchy's pacman hook refuses a direct -Syu, so there it is `pacman -S --needed` instead, and the dialog says why"
+            },
+            {
+              "range": ">=6.0",
+              "impact": "the repository setup writes a `[tui-tools]` section under /etc/pacman.d and adds one Include line to pacman.conf, so a later setup finds it again instead of appending a second block"
+            },
+            {
+              "range": ">=6.0",
+              "impact": "pacman records no repository for an installed package, so a companion's origin is inferred rather than read: a bare `[installed]` in `pacman -Sl tui-tools` means the machine has the version that repository offers, and `pacman -Si` names the repository whose version matches the installed one"
+            }
+          ]
+        },
+        "apt": {
+          "binary": "apt",
+          "minimum": "2.0",
+          "tested": [
+            "2.8.3",
+            "3.2.0"
+          ],
+          "features": [],
+          "notes": [
+            {
+              "range": ">=2.0",
+              "impact": "the available version comes from `apt-cache policy`, which reads the lists already on disk; a repository added a moment ago reports nothing until the refresh, which is the first previewed step of an install rather than something the read path does behind you"
+            },
+            {
+              "range": ">=2.0",
+              "impact": "a companion's origin is read off `apt-cache policy`: the version marked `***` is the installed one, and the first source under it that is not /var/lib/dpkg/status is where it came from. apt cannot install from a named repository, so a switch names the family's version instead"
+            }
+          ]
+        },
+        "dnf": {
+          "binary": "dnf",
+          "minimum": "4.0",
+          "tested": [],
+          "features": [
+            {
+              "name": "dnf5",
+              "since": "5.0"
+            }
+          ],
+          "notes": [
+            {
+              "range": ">=5.0",
+              "impact": "`dnf --version` prints `dnf5 version 5.2.18.0`, where dnf4 prints a bare `4.24.0` on its first line; both are read by the same pattern, which keeps three components because a four-part version is not one the family schema records"
+            },
+            {
+              "range": ">=4.0",
+              "impact": "the available version comes from `dnf repoquery`, which answers from the cache on disk, so a machine whose metadata has expired reports what it last fetched rather than refreshing behind you"
+            },
+            {
+              "range": ">=4.0",
+              "impact": "dnf is the one manager that records where an installed package came from, so a companion's origin is read rather than inferred: `dnf repoquery --installed --qf '%{name}|%{from_repo}'` answers it on dnf4 and dnf5, and `@System` means it came from a file"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-tools",
+      "page": "https://tui.tools/tools/tui-tools/",
+      "changelog": "https://github.com/tui-tools/tui-tools/releases/tag/v0.3.1"
+    },
+    {
+      "name": "tui-traffic",
+      "package": "tui-traffic",
+      "binary": "tui-traffic",
+      "tagline": "What the network is doing right now, interface by interface",
+      "description": "Realtime network metrics for one Linux machine, in the terminal. Three screens, refreshed every second, and every number on them comes from a file the kernel already exports.\n\n**Interfaces** is throughput per interface: RX and TX in bytes per second and packets per second, a sparkline over the last minute, the link state, and the errors and drops the counters have accumulated. It is `/proc/net/dev` read twice a second apart, which is what a rate actually is.\n\n**Connections** summarises the conntrack table: how many connections there are, what states they are in, split by protocol, and the busiest talkers by bytes when the kernel is counting them. Byte accounting (`net.netfilter.nf_conntrack_acct`) is off by default on most kernels, and when it is off this screen says so rather than inventing figures. On a machine with no conntrack at all it counts sockets instead and names the source it used.\n\n**Sockets** is what is listening and what is established, from `/proc/net/tcp`, `tcp6`, `udp` and `udp6`.\n\nIt changes nothing: no action key, no confirm dialog, and no privilege beyond the `sudo -n` that reading the conntrack table needs.",
+      "category": "network",
+      "icon": "https://tui.tools/tools/tui-traffic/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-traffic/tui-traffic-main.png",
+      "version": "0.1.2",
+      "released": "2026-09-25T22:22:10Z",
+      "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "conntrack"
+      ],
+      "compat": {
+        "conntrack": {
+          "binary": "conntrack",
+          "minimum": "1.4.0",
+          "tested": [],
+          "features": [],
+          "notes": [
+            {
+              "range": "<1.4.0",
+              "impact": "`conntrack -L -o extended` prints a layout this parser does not read, so the connections screen falls back to /proc/net/nf_conntrack or to counting sockets, and says which it used"
+            }
+          ]
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-traffic",
+      "page": "https://tui.tools/tools/tui-traffic/",
+      "changelog": "https://github.com/tui-tools/tui-traffic/releases/tag/v0.1.2"
+    },
+    {
       "name": "tui-update",
       "package": "tui-update",
       "binary": "tui-update",
       "tagline": "Pending package updates, what they restart, and a snapshot first",
-      "description": "A terminal UI for the updates waiting on your machine. It reads them from whichever package manager the machine actually runs — `pacman`, `apt` or `dnf` — and shows what a list of versions never tells you: what applying them will cost.\n\nEvery pending update is on one screen, with its current and new version, its repository, its size and its security flag where the manager publishes one, and the kernel and firmware sorted to the top because they are what turns an upgrade into a reboot.\n\n`enter` gives you the plan: the manager's own dry run, the restart classification — nothing, the services still holding replaced code open, or a reboot with the reason — whether a `snapper` snapshot can be taken first and the exact command that would take it, and the whole sequence, in order, before anything runs.\n\n`U` applies it behind a confirm dialog carrying that sequence, streaming the output as it goes. It never reboots by itself: when the upgrade needs one it offers `R`, with its own confirmation.\n\nRun `tui-update --demo` to drive a sample machine: every key works, every command is built and previewed for real, and nothing touches your system.",
+      "description": "A terminal UI for the updates waiting on your machine. It reads them from whichever package manager the machine runs — `pacman`, `apt` or `dnf` — and shows what a list of versions never tells you: what applying them will cost.\n\nEvery pending update is on one screen, with its current and new version, its repository, its size and its security flag where the manager publishes one, and the kernel and firmware sorted to the top.\n\n`enter` gives you the plan: the manager's own dry run, the restart classification — nothing, the services holding replaced code open, or a reboot with the reason — whether a `snapper` snapshot can be taken first, and the whole sequence in order.\n\n`U` applies it behind a confirm dialog carrying that sequence, streaming the output as it goes. It never reboots by itself: when the upgrade needs one it offers `R`, confirmed too.\n\nOn the plan, `m` cycles the upgrades the manager really has, security-only on dnf included, and `s` turns the snapshot pair off and on. On the list, `H` holds a package at its version, or lifts the hold.\n\nRun `tui-update --demo` to drive a sample machine: every key works, every command is previewed for real, and nothing touches your system.",
       "category": "packages",
       "icon": "https://tui.tools/tools/tui-update/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-update/tui-update-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T13:55:03Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:23:00Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -1023,6 +1474,14 @@
             {
               "range": ">=2.0",
               "impact": "the services to restart come from `needrestart -b`, which reads other processes' memory maps and therefore needs root; without it the package names decide"
+            },
+            {
+              "range": ">=2.0",
+              "impact": "there is no upgrade that applies only the security updates; `unattended-upgrade` honours Unattended-Upgrade::Allowed-Origins, which on Debian includes the plain archive too and can reboot on its own, so the security-only mode is not offered here"
+            },
+            {
+              "range": ">=2.0",
+              "impact": "a package is held with `apt-mark hold`, the dpkg selection every apt front end honours; `apt-mark showhold` is the unprivileged read the pending list marks its rows from"
             }
           ]
         },
@@ -1051,26 +1510,36 @@
             {
               "range": ">=4.0",
               "impact": "`dnf check-update` exits 100 when there are updates, so its exit code is interpreted rather than treated as a failure; it also prints only the new version, and the installed one is read from rpm"
+            },
+            {
+              "range": ">=4.0",
+              "impact": "`dnf upgrade --security` narrows the same transaction to the advisories, so the security-only mode is the plain upgrade with one flag rather than a second code path; dependencies with no advisory of their own still come along"
+            },
+            {
+              "range": ">=4.0",
+              "impact": "holding a package needs the versionlock plugin, which a minimal install does not carry; it is detected before the key is offered, and the refusal names python3-dnf-plugin-versionlock, or dnf-plugins-extras-versionlock on RHEL and its rebuilds"
             }
           ]
         }
       },
       "repo": "https://github.com/tui-tools/tui-update",
       "page": "https://tui.tools/tools/tui-update/",
-      "changelog": "https://github.com/tui-tools/tui-update/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-update/releases/tag/v0.2.2"
     },
     {
       "name": "tui-users",
       "package": "tui-users",
       "binary": "tui-users",
       "tagline": "Accounts, groups, keys and sudo, with every change previewed before it runs",
-      "description": "A terminal UI for the machine's local accounts. It lists every account with the facts that decide what it can do — uid, primary group, groups, shell, last login, whether the password is usable, locked or missing — and puts the ones worth a second look at the top, with the reason: a second account with uid 0, an empty password, a service account with a login shell.\n\nOpen an account and you get the whole picture: its aging policy in words rather than in days-since-1970, the authorized keys in its `~/.ssh` with their fingerprints, what `sudo` says it may run, and its open sessions. A second screen lists the groups with their real membership, primary members included; a third quotes every rule in `/etc/sudoers` and `/etc/sudoers.d`, marking the ones that run without a password.\n\nChanges are previewed: creating an account, deleting it, locking it, setting a password, editing group membership, changing the shell, setting an expiry, adding or removing an authorized key. A password never reaches a command line — it goes to `chpasswd` on standard input.\n\nRun `tui-users --demo` to drive a sample machine: every key works and nothing touches your system.",
+      "description": "A terminal UI for the machine's local accounts. It lists every account with the facts that decide what it can do — uid, primary group, groups, shell, last login, whether the password is usable, locked or missing — and puts the ones worth a second look at the top, with the reason: a second account with uid 0, an empty password, a service account with a login shell.\n\nOpen an account and you get the whole picture: its aging policy in words rather than in days-since-1970, the authorized keys in its `~/.ssh` with their fingerprints, what `sudo` says it may run, and its open sessions. A second screen lists the groups with their real membership, primary members included; a third quotes every rule in `/etc/sudoers` and `/etc/sudoers.d`, marking the ones that run without a password.\n\nChanges are previewed: creating and deleting accounts and groups, locking an account, setting a password, granting or revoking sudo, editing group membership, the login shell, the expiry, and authorized keys. A password never reaches a command line — it goes to `chpasswd` on standard input.\n\nRun `tui-users --demo` to drive a sample machine: every key works and nothing touches your system.",
       "category": "users",
       "icon": "https://tui.tools/tools/tui-users/icon.svg",
       "screenshot": "https://tui.tools/tools/tui-users/tui-users-main.png",
-      "version": "0.1.2",
-      "released": "2026-08-30T13:55:15Z",
+      "version": "0.2.2",
+      "released": "2026-09-25T22:22:44Z",
       "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
       "platforms": [
         "linux/amd64",
         "linux/arm64"
@@ -1093,7 +1562,7 @@
             },
             {
               "range": ">=4.8",
-              "impact": "the minimum above is informative, not enforced: it is the release whose flags this tool uses (`useradd -r -m -G`, `usermod -L -U -s`, `userdel -r`, `gpasswd -a -d`, `chage -E -M -l`), all far older than any supported distribution"
+              "impact": "the minimum above is informative, not enforced: it is the release whose flags this tool uses (`useradd -r -m -G`, `usermod -L -U -s`, `userdel -r`, `gpasswd -a -d`, `groupadd -g`, `groupdel`, `chage -E -M -l`), all far older than any supported distribution"
             },
             {
               "range": ">=4.8",
@@ -1129,7 +1598,46 @@
       },
       "repo": "https://github.com/tui-tools/tui-users",
       "page": "https://tui.tools/tools/tui-users/",
-      "changelog": "https://github.com/tui-tools/tui-users/releases/tag/v0.1.2"
+      "changelog": "https://github.com/tui-tools/tui-users/releases/tag/v0.2.2"
+    },
+    {
+      "name": "tui-wireguard",
+      "package": "tui-wireguard",
+      "binary": "tui-wireguard",
+      "tagline": "WireGuard interfaces and peers, from the terminal",
+      "description": "WireGuard interfaces and their peers from the terminal, and the host around them.\n\nThe interfaces screen reads `wg show all dump`: each interface's state, listen port and peer count, plus whether the host firewall lets a handshake reach the port and whether the host forwards for it. The peers screen shows endpoints, handshakes, transfer, allowed IPs and keepalive.\n\nEvery change is previewed as the exact command line and applied only after you confirm it: creating an interface from zero (an endpoint, or a forwarding server with its `ip_forward`, FORWARD and MASQUERADE rules and its listen port opened in INPUT), bringing one up or down, adding or removing a peer (optionally with a generated pre-shared key) and saving the runtime config. A private key is never shown, typed, or put on a command line.\n\nThis tool was called tui-vpn up to 0.4.x. The Headscale control plane it used to manage moved to [tui-tailscale](https://tui.tools/tools/tui-tailscale/).\n\nRun it with `--demo` to see every screen with nothing installed.",
+      "category": "vpn",
+      "icon": "https://tui.tools/tools/tui-wireguard/icon.svg",
+      "screenshot": "https://tui.tools/tools/tui-wireguard/tui-wireguard-status.png",
+      "version": "0.5.0",
+      "released": "2026-09-25T22:58:10Z",
+      "unreleased": false,
+      "stability": "beta",
+      "stableSince": null,
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "license": "MIT",
+      "backends": [
+        "wireguard-tools"
+      ],
+      "compat": {
+        "wireguard-tools": {
+          "binary": "wg",
+          "minimum": "1.0.20200513",
+          "tested": [
+            "1.0.20210914",
+            "1.0.20250521",
+            "1.0.20260223"
+          ],
+          "features": [],
+          "notes": []
+        }
+      },
+      "repo": "https://github.com/tui-tools/tui-wireguard",
+      "page": "https://tui.tools/tools/tui-wireguard/",
+      "changelog": "https://github.com/tui-tools/tui-wireguard/releases/tag/v0.5.0"
     }
   ],
   "companions": [
@@ -1138,9 +1646,9 @@
       "kind": "mirror",
       "summary": "Self-hosted Tailscale control server, rebuilt from the upstream source tag",
       "upstream": "https://github.com/juanfont/headscale",
-      "upstreamVersion": "v0.26.1",
-      "version": "0.26.1",
-      "released": "2026-09-01",
+      "upstreamVersion": "v0.29.4",
+      "version": "0.29.4",
+      "released": "2026-09-25",
       "packages": [
         "headscale"
       ],
