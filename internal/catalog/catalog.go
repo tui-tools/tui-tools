@@ -21,7 +21,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"runtime"
 	"sort"
@@ -373,8 +375,70 @@ func WithExampleComponent(doc Catalog) Catalog {
 	return doc
 }
 
-// Fetch reads the live catalog over HTTPS.
+// CheckURL refuses a catalog address that is not HTTPS. The catalog decides
+// which packages the dashboard offers to install, and the address can come
+// from a configuration file or an environment variable that a sudo invocation
+// may carry over from the user, so a plain-HTTP address (one anybody on the
+// path can answer) is an error rather than a fallback. Plain HTTP is accepted
+// only for a loopback host, which never leaves the machine and is what tests
+// serve from.
+func CheckURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("catalog: %q is not a URL: %w", raw, err)
+	}
+	switch {
+	case parsed.Scheme == "https" && parsed.Host != "":
+		return nil
+	case parsed.Scheme == "http" && isLoopback(parsed.Hostname()):
+		return nil
+	default:
+		return fmt.Errorf("catalog: %s is not an https:// address; "+
+			"the catalog is only read over HTTPS", redactURL(parsed))
+	}
+}
+
+// isLoopback reports whether a host name is this machine: localhost or a
+// loopback address. Any other name is not resolved here, because what it
+// resolves to is exactly what an attacker on the path would decide.
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// redactURL is the address as an error may show it: without user info,
+// which a URL can carry and which is a credential.
+func redactURL(u *url.URL) string {
+	clean := *u
+	clean.User = nil
+	return clean.String()
+}
+
+// fetchClient is the HTTP client Fetch uses: the default transport, with every
+// redirect held to the same rule as the first address, so an HTTPS catalog
+// cannot hand the request on to plain HTTP.
+var fetchClient = &http.Client{
+	CheckRedirect: func(request *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("catalog: stopped after %d redirects", maxRedirects)
+		}
+		return CheckURL(request.URL.String())
+	},
+}
+
+// maxRedirects is how many redirects Fetch follows, the same as net/http's
+// default.
+const maxRedirects = 10
+
+// Fetch reads the live catalog over HTTPS. Any other scheme is refused before
+// a connection is made, and so is a redirect to one (see CheckURL).
 func Fetch(ctx context.Context, url string) (Catalog, error) {
+	if err := CheckURL(url); err != nil {
+		return Catalog{}, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
@@ -384,7 +448,7 @@ func Fetch(ctx context.Context, url string) (Catalog, error) {
 	}
 	request.Header.Set("Accept", "application/json")
 
-	response, err := http.DefaultClient.Do(request)
+	response, err := fetchClient.Do(request)
 	if err != nil {
 		return Catalog{}, err
 	}
