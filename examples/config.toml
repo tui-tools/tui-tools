@@ -5,7 +5,8 @@
 # machine-wide one. TUI_TOOLS_* environment variables override both, and
 # command line flags override everything.
 
-# Where the family catalog is fetched from.
+# Where the family catalog is fetched from. Only https:// is read (plain
+# http only for a loopback address); anything else falls back to the snapshot.
 #
 # The catalog only informs: it says which tools exist and what each one is
 # called to a package manager. Whatever it answers is validated here, and

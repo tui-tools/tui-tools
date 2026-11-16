@@ -480,7 +480,8 @@ faked `optdepends` is worse than none.
 [`examples/config.toml`](examples/config.toml).
 
 ```toml
-# Where the family catalog is fetched from.
+# Where the family catalog is fetched from. Only https:// is read (plain
+# http only for a loopback address); anything else falls back to the snapshot.
 catalog = "https://tui.tools/catalog.json"
 # Never fetch it; use the snapshot built into this binary.
 offline = false
