@@ -269,11 +269,13 @@ type wrongKey struct {
 	*packages.Fake
 }
 
-// Run answers the fingerprint probe with somebody else's key.
+// Run answers the fingerprint probe with somebody else's key: a well-formed
+// single primary key, so the refusal comes from the fingerprint itself.
 func (w wrongKey) Run(ctx context.Context, cmd pkgmgr.Command) (string, error) {
 	if len(cmd.Argv) > 0 && cmd.Argv[0] == "gpg" {
 		w.Ran = append(w.Ran, cmd)
-		return "fpr:::::::::0000000000000000000000000000000000000000:\n", nil
+		return "pub:-:4096:1:0000000000000000:1790000000:::-:::scESC::::::23::0:\n" +
+			"fpr:::::::::0000000000000000000000000000000000000000:\n", nil
 	}
 	return w.Fake.Run(ctx, cmd)
 }

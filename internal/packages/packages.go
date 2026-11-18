@@ -116,7 +116,7 @@ func NewFake(names []string, installed, available map[string]string) *Fake {
 func (f *Fake) Run(ctx context.Context, cmd pkgmgr.Command) (string, error) {
 	if isKeyProbe(cmd) {
 		f.Ran = append(f.Ran, cmd)
-		return "fpr:::::::::" + Fingerprint + ":\n", nil
+		return demoKeyProbe, nil
 	}
 	if out, mutation, ok := f.companionAnswer(cmd); ok {
 		if mutation {
@@ -129,6 +129,13 @@ func (f *Fake) Run(ctx context.Context, cmd pkgmgr.Command) (string, error) {
 
 // isKeyProbe reports whether a step is the `gpg --show-keys` the setup uses to
 // read the fingerprint of the key it just downloaded.
+// demoKeyProbe is what `gpg --show-keys --with-colons` prints for the family's
+// key: one primary key (the pub line) and its fingerprint. The kit trusts a key
+// only when exactly one primary key is shown and it is the pinned one, so the
+// pub line is part of the answer, not decoration.
+const demoKeyProbe = "pub:-:4096:1:389120B277E4FB44:1790000000:::-:::scESC::::::23::0:\n" +
+	"fpr:::::::::" + Fingerprint + ":\n"
+
 func isKeyProbe(cmd pkgmgr.Command) bool {
 	if len(cmd.Argv) < 2 || cmd.Argv[0] != "gpg" {
 		return false
